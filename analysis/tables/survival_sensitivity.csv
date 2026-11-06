@@ -1,0 +1,3 @@
+"version","n","events","logrank_chisq","logrank_p","cox_APWP_HR","cox_APWP_p","cox_PrevHC_HR","cox_PrevHC_p"
+"primary (n=120)",120,39,1.571,0.21,1.752,0.622,1.217,0.64
+"excluding 3 flagged",117,37,1.466,0.226,1.718,0.637,1.183,0.701

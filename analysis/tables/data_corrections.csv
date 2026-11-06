@@ -1,0 +1,6 @@
+"name","school","first_season","last_season","Fired","StillEmployedAtSchool","OffFieldIssuesFiring","issue","action"
+"Hugh Freeze","Auburn",2023,2025,1,1,0,"Internal contradiction: Fired=1 and StillEmployed=1","RETAINED as-is in primary; flagged"
+"Luke Fickell","Wisconsin",2022,2025,1,1,0,"Internal contradiction: Fired=1 and StillEmployed=1","RETAINED as-is in primary; flagged"
+"Brian Kelly","LSU",2022,2025,0,0,0,"External record: still LSU HC 2025; StillEmployedAtSchool=0 incorrect","EXCLUDED in sensitivity survival"
+"Mike Gundy","Oklahoma State",2005,2025,1,0,0,"External record: still OSU HC 2025; Fired=1 and StillEmployed=0 incorrect","EXCLUDED in sensitivity survival"
+"James Franklin","Penn State",2014,2025,1,0,0,"External record: still PSU HC 2025; Fired=1 and StillEmployed=0 incorrect","EXCLUDED in sensitivity survival"

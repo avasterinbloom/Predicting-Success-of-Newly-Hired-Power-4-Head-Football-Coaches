@@ -1,0 +1,8 @@
+"variable","AllPriorWinPct","PreviousWinPct","AgeAtHiringMinus50","NFLCoachingExperience","sp_prev_rel","team_sp_recent","numb_years_Coord_HC"
+"AllPriorWinPct",1,0.7936,0.1239,-0.1579,0.484,-0.0428,0.2628
+"PreviousWinPct",0.7936,1,0.1239,-0.2074,0.3521,-0.0171,0.2017
+"AgeAtHiringMinus50",0.1239,0.1239,1,0.197,-0.0922,-0.2501,0.6675
+"NFLCoachingExperience",-0.1579,-0.2074,0.197,1,-0.0906,0.039,-0.0018
+"sp_prev_rel",0.484,0.3521,-0.0922,-0.0906,1,-0.0679,-0.1066
+"team_sp_recent",-0.0428,-0.0171,-0.2501,0.039,-0.0679,1,0.0205
+"numb_years_Coord_HC",0.2628,0.2017,0.6675,-0.0018,-0.1066,0.0205,1

@@ -1,0 +1,17 @@
+"term","lasso_min","lasso_1se","enet_min"
+"(Intercept)",-2.42437841504841,-1.9639047649819,-2.04531372856667
+"PrevHCAnyLevel",0,0,0
+"AllPriorWinPct",0,0,0
+"PreviousWinPct",0,0,0
+"PreviousOC",6.25522977235611,0,4.34088460795782
+"PreviousDC",0,0,0
+"SideOfBallO",0,0,0
+"ConnectionToHiring.School",0,0,0
+"PlayedNFL",-0.467725496416503,0,0
+"AgeAtHiringMinus50",-0.0727214135177237,0,0
+"NFLCoachingExperience",0,0,0
+"WonCCasHCany",1.15443795975297,0,0
+"Conf.LeavingP4",0,0,0
+"team_sp_recent",-0.143068610700395,0,-0.0688377707921387
+"PromoteWithin",0,0,0
+"PrevHCAnyLevel:sp_prev_rel",0,0,0

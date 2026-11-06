@@ -1,0 +1,5 @@
+"Hypothesis","Term","Estimate","SE","p_raw","p_Bonf","p_Holm"
+"H1","AllPriorWinPct",7.72,12.332,0.5334,1,1
+"H2","ConnectionToHiring.School",-0.425,2.409,0.8604,1,1
+"H3","PreviousOC",7.966,3.853,0.0425,0.1701,0.1701
+"H4","PlayedNFL",-3.947,3.197,0.2212,0.8849,0.6636

@@ -1,0 +1,743 @@
+---
+title: "Predicting Success of College Football Coaching Hires"
+subtitle: "A Regression-Based Decision Framework"
+author: "4-Student Team, BSDS"
+date: "`r Sys.Date()`"
+output:
+  pdf_document:
+    toc: true
+    toc_depth: 3
+    latex_engine: xelatex
+    keep_tex: true
+    number_sections: false
+    fig_caption: true
+    includes:
+      in_header: preamble.tex
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE,
+                      fig.align = "center", out.width = "85%")
+library(knitr); library(kableExtra)
+
+fig_path <- function(p) normalizePath(p, mustWork = FALSE)
+
+read_tbl <- function(path) {
+  if (!file.exists(path)) return(data.frame(note = paste("missing:", path)))
+  read.csv(path, stringsAsFactors = FALSE)
+}
+```
+
+```{r data-early, include=FALSE}
+reg  <- readRDS("data/processed/reg_df.rds")
+full <- readRDS("data/processed/full_df.rds")
+fm_conf_early <- readRDS("data/processed/confirm_model.rds")
+.h34_p <- summary(fm_conf_early$fit)$coefficients[
+  c("AllPriorWinPct","ConnectionToHiring.School","PreviousOC","PlayedNFL"),
+  "Pr(>|t|)"]
+h3_p_raw  <- .h34_p["PreviousOC"]
+h3_p_holm <- p.adjust(.h34_p, "holm")["PreviousOC"]
+```
+
+# Executive Summary
+
+This project fits a regression-based decision framework to 84 college-football
+head-coaching hires (1999–2025), testing H1–H4 in a pre-specified confirmatory
+model and evaluating a separate BIC-selected predictive model under honest
+out-of-sample validation. The four findings below are ordered by syllabus
+topic: model selection, diagnostics, prediction accuracy, then confirmatory
+inference.
+
+**Model selection.** The BIC procedure retains a parsimonious two-predictor
+model (`PreviousOC + team_sp_recent`). Its adjusted R-squared
+(`r round(read.csv("tables/model_comparison.csv")$adjR2[3], 3)`) exceeds that
+of the 16-parameter confirmatory model
+(`r round(read.csv("tables/model_comparison.csv")$adjR2[4], 3)`), and its
+10-fold CV-R-squared (`r round(read.csv("tables/model_comparison.csv")$CV_R2[3], 3)`)
+is the highest of any model tested. The full table is in §5.1b.
+
+**Diagnostics.** The main-effects residual model shows no pattern in
+fitted-versus-residual plots, no significant heteroscedasticity
+(White p = `r round(read.csv("tables/heteroscedasticity_tests.csv")$p_value[2], 3)`),
+no residual autocorrelation in a cross-sectional dataset, and no need for
+response transformation (Box-Cox λ̂ = 0.909, 95% CI including 1.0). WLS and
+OLS coefficient signs agree. See §5.0.
+
+**Prediction accuracy.** On post hoc temporal validation (n = 42, 2022+), the
+BIC model achieves 95% prediction-interval coverage of
+`r round(read.csv("tables/holdout_performance.csv")$PI_coverage[1], 3)` with
+RMSE `r round(read.csv("tables/decision_rule_validation.csv")$value[3], 2)`,
+essentially equal to the train-mean baseline
+(`r round(read.csv("tables/decision_rule_validation.csv")$value[4], 2)`) and
+a Spearman rank correlation of
+`r round(read.csv("tables/decision_rule_validation.csv")$value[2], 3)`.
+**The model does not outperform a simple baseline on prediction, and this
+is the honest empirical finding.** §5.7a discloses that the 42-row cohort
+replaced a pre-registered 9-row cohort after the 9-row result was observed.
+
+**Confirmatory inference.** No hypothesis survives multiplicity correction at
+α = 0.05. H3 (previousOC) is nominally significant before correction
+(p_raw = `r sprintf("%.3f", h3_p_raw)`) but does not survive Holm adjustment
+(p_Holm = `r sprintf("%.3f", h3_p_holm)`). H1, H2, and H4 are not significant
+in either raw or adjusted form. Bootstrap 95% CI for the H1 net effect
+(`tables/h1_sensitivity.csv`) contains zero. At n = 84 with 16 parameters,
+minimum detectable effects are large enough that the null results for H1, H2,
+and H4 are uninformative rather than evidence of no effect (§8).
+
+**Robustness.** The school random intercept collapses to the boundary
+(LRT = 0, p = 0.50, ICC ≈ 0.00; §5.5b); fixed-effects conclusions are
+unchanged. Excluding the three externally-flagged coaches from the survival
+sample leaves the Kaplan–Meier and Cox conclusions unchanged
+(`tables/survival_sensitivity.csv`). The logistic retention analysis (§5.8)
+shows `PreviousOC` as the only pre-hire predictor with a consistently
+positive association across OLS and logistic frameworks.
+
+**Decision rule.** The Coach Hire Score is presented as an **exploratory
+ranking instrument**, not a classifier. Every worked example returns
+Inconclusive at 95% PI (interval widths ≈ 32 CPI points). §6 validates the
+score as exploratory only; it is not ready for operational hiring decisions.
+
+# 1. Motivation
+
+College-football head-coaching hires are high-stakes decisions -- buyouts
+routinely exceed twenty million dollars -- but rarely evaluated with a
+transparent statistical framework. A regression-based approach cannot
+capture every determinant (culture, fit, in-season luck) but it can
+identify which observable pre-hire signals consistently predict on-field
+success, and provide a principled ranking instrument for athletic directors.
+
+# 2. Research Questions & Hypotheses
+
+**RQ:** How well do observable pre-hire characteristics predict the
+Coach Performance Index (CPI = `sp_rel_team`) of a college-football
+head-coaching hire?
+
+| Hypothesis | Predictor | Expected sign |
+|---|---|---|
+| **H1** | Prior head-coaching win percentage (`AllPriorWinPct`) | positive |
+| **H2** | Connection to hiring school (`ConnectionToHiring.School`) | positive |
+| **H3** | Prior offensive-coordinator experience (`PreviousOC`) | positive |
+| **H4** | NFL playing experience (`PlayedNFL`) | positive |
+
+RQ6 (process reflection) appears in Section 9.
+
+# 3. Data
+
+```{r}
+reg  <- readRDS("data/processed/reg_df.rds")
+full <- readRDS("data/processed/full_df.rds")
+```
+
+- **Full sample:** `r nrow(full)` CSV rows; **completed hires analysed:** `r sum(!is.na(full$last_season))` (12 speculative 2026 hires with `last_season = NA` are excluded)
+- **Regression sample** (two or more completed seasons, per documented
+  deviation from the plan's three-season threshold): `r nrow(reg)` hires
+- **Imputations** (`tables/allpriorwinpct_imputation_log.csv`):
+  `r nrow(read_tbl("tables/allpriorwinpct_imputation_log.csv"))` rows had
+  `AllPriorWinPct` imputed from `PreviousWinPct` (data inconsistency where
+  prior HCs were flagged but prior win% was missing).
+
+# 4. Methods
+
+| Stage | Method | Curriculum |
+|---|---|---|
+| Baseline OLS | Multiple linear regression | W1-W2 |
+| Diagnostics | BP, White, DW, Cook's D | W3 |
+| Model selection | BIC stepwise; AIC as sensitivity | W4-W5 |
+| Confirmatory | Full-formula OLS for H1-H4 | W5 |
+| Simultaneous inference | Bonferroni + Holm | W5 |
+| Resampling | Jackknife + 1000-bootstrap | W6 (this) |
+| Survival | Kaplan-Meier + Cox PH | W6 (this) |
+| Holdout | 9-row 2022+ prospective | W6 (this) |
+| Decision rule | Coach Hire Score | W7 (this) |
+
+# 5. Results
+
+**Factor-coding convention.** All binary predictors and factor variables are
+coded with their first level (`0`) as the reference category. Coefficients
+throughout §5 therefore represent the effect relative to the reference level.
+
+## 5.0 Diagnostics
+
+Diagnostics were run on the main-effects specification; the interaction
+model in Section 5.3 is a superset, so the qualitative conclusions carry over.
+
+### 5.0a Residual diagnostics
+
+```{r}
+knitr::include_graphics(fig_path("figures/fig3_residual_panel.png"))
+```
+
+No systematic pattern; Q-Q approximately linear except tails; scale-location
+roughly flat; Cook's distance shows no dominating point.
+
+### 5.0b Heteroscedasticity
+
+```{r}
+knitr::include_graphics(fig_path("figures/fig4_white_aux.png"))
+kable(read_tbl("tables/heteroscedasticity_tests.csv"), digits = 3) |>
+  kable_styling(full_width = FALSE)
+```
+
+Breusch-Pagan and White (squares-only at n=84) both fail to reject.
+White statistic
+`r round(read.csv("tables/heteroscedasticity_tests.csv")$statistic[2], 2)`
+on `r read.csv("tables/heteroscedasticity_tests.csv")$df[2]` df
+(p = `r round(read.csv("tables/heteroscedasticity_tests.csv")$p_value[2], 3)`).
+WLS is a sensitivity check only; OLS and WLS coefficient signs agree.
+
+### 5.0c Autocorrelation
+
+```{r}
+knitr::include_graphics(fig_path("figures/fig3b_acf_pacf.png"))
+kable(read_tbl("tables/autocorrelation_test.csv"), digits = 3) |>
+  kable_styling(full_width = FALSE)
+```
+
+No systematic lag structure; Durbin-Watson
+`r round(read.csv("tables/autocorrelation_test.csv")$statistic[1], 2)`
+(p = `r round(read.csv("tables/autocorrelation_test.csv")$p_value[1], 3)`).
+Cross-sectional observations; no correction applied.
+
+### 5.0d Influence diagnostics
+
+`r sum(read.csv("tables/influence_diagnostics.csv")$flag_cook)` obs exceed
+Cook's D > 4/n;
+`r sum(read.csv("tables/influence_diagnostics.csv")$flag_lev)` exceed
+leverage > 2p/n;
+`r sum(read.csv("tables/influence_diagnostics.csv")$flag_dfb)` exceed
+|DFBETA| > 2/sqrt(n). None deleted.
+
+### 5.0e Response transformation
+
+```{r}
+knitr::include_graphics(fig_path("figures/fig4b_boxcox.png"))
+```
+
+Box-Cox on the shifted response (shift 22.43) peaks at lambda-hat = 0.909
+with 95% CI including 1.0. No transformation applied.
+
+
+## 5.1 Confirmatory model (baseline full formula)
+
+```{r}
+fm_conf <- readRDS("data/processed/confirm_model.rds")
+cat(sprintf("n = %d, R-squared = %.3f, adj-R-squared = %.3f",
+            nobs(fm_conf$fit),
+            summary(fm_conf$fit)$r.squared,
+            summary(fm_conf$fit)$adj.r.squared))
+```
+### 5.1b Model comparison: null to full
+
+10-fold CV on the full regression sample (fixed seed, same folds for all 4 models).
+
+```{r}
+kable(read.csv("tables/model_comparison.csv"), digits = 3,
+      row.names = FALSE) |>
+  kable_styling(full_width = FALSE)
+```
+
+**Interpretation:** compare the `adjR2` and `CV_R2` columns. If the confirmatory model adjusted R-squared is not materially above the PreviousOC-only model, then 13 of the 15 predictors add noise rather than signal. `CV_R2` is the honest out-of-sample measure.
+
+
+### 5.1b-ii Formal linear-hypothesis test of the H1 net effect
+
+The pre-registered H1 test is the joint null that the two prior-win-%
+coefficients sum to zero: $H_0: \beta_{AllPriorWinPct} + \beta_{PreviousWinPct} = 0$.
+This is tested with a single linear restriction using `car::linearHypothesis`,
+which produces an F-statistic equivalent to the squared t-statistic of the
+net effect.
+
+```{r}
+lh <- car::linearHypothesis(
+  fm_conf$fit,
+  "AllPriorWinPct + PreviousWinPct = 0")
+
+kable(data.frame(
+  Hypothesis = "H1: AllPriorWinPct + PreviousWinPct = 0",
+  F          = round(lh$`F`[2], 4),
+  df1        = lh$Df[2],
+  df2        = lh$Res.Df[2],
+  p_value    = round(lh$`Pr(>F)`[2], 4)),
+  row.names = FALSE) |>
+  kable_styling(full_width = FALSE)
+```
+
+The F-statistic reported above equals the squared t-statistic of the net
+effect in the sensitivity table of §5.1b to within rounding. Under the
+pre-registered H1 operationalisation the null is not rejected; H1 is
+therefore not supported.
+
+## 5.1c OLS projection and sum-of-squares decomposition
+
+The ordinary-least-squares fit can be written through the projection (hat)
+matrix $H = X(X'X)^{-1}X'$, where $X$ is the $n \times p$ design matrix with
+intercept. The residual maker is $I - H$, so the fitted values are $Hy$ and
+the residuals are $(I - H)y$. The resulting sum-of-squares decomposition is
+
+$$
+SS_{reg} = (Hy)'(Hy) - n\,\bar{y}^2, \qquad
+SS_{res} = y'(I - H)y,
+$$
+
+with degrees of freedom $df_{reg} = p - 1$ and $df_{res} = n - p$. The R
+chunk below computes both from first principles and verifies them against
+`anova(fit)` to machine precision (assertion tolerance 1e-6).
+
+```{r}
+fit <- readRDS("data/processed/confirm_model.rds")$fit
+X   <- model.matrix(fit)
+y   <- model.frame(fit)$sp_rel_team
+n   <- nrow(X)
+p   <- ncol(X)
+
+H         <- X %*% solve(crossprod(X)) %*% t(X)
+I_minus_H <- diag(n) - H
+y_bar     <- mean(y)
+Hy        <- as.numeric(H %*% y)
+
+SSreg <- sum(Hy^2) - n * y_bar^2
+SSres <- as.numeric(t(y) %*% I_minus_H %*% y)
+SStot <- SSreg + SSres
+df_reg <- p - 1
+df_res <- n - p
+
+a <- anova(fit)
+SSreg_anova <- sum(a[, "Sum Sq"]) - a["Residuals", "Sum Sq"]
+SSres_anova <- a["Residuals", "Sum Sq"]
+df_reg_anova <- sum(a[-nrow(a), "Df"])
+df_res_anova <- a["Residuals", "Df"]
+
+stopifnot(
+  abs(SSreg - SSreg_anova) < 1e-6,
+  abs(SSres - SSres_anova) < 1e-6,
+  df_reg == df_reg_anova,
+  df_res == df_res_anova
+)
+
+kable(data.frame(
+  Source = c("Regression", "Residual", "Total"),
+  SS = round(c(SSreg, SSres, SStot), 3),
+  df = c(df_reg, df_res, n - 1),
+  MS = round(c(SSreg/df_reg, SSres/df_res, NA), 3),
+  F  = round(c((SSreg/df_reg) / (SSres/df_res), NA, NA), 3)),
+  row.names = FALSE) |>
+  kable_styling(full_width = FALSE)
+```
+
+Both decompositions agree with `anova(fit)` to within 1e-6 in sums of squares
+and exactly in degrees of freedom, confirming the projection-matrix
+formulation.
+
+### 5.1b-iii Multicollinearity consequence: standard error of the H1 coefficient
+
+Retaining `PreviousWinPct` alongside `AllPriorWinPct` inflates the standard
+error of `AllPriorWinPct` by the variance-inflation factor. The table below
+reports the coefficient and standard error of `AllPriorWinPct` under two
+specifications — the confirmatory model that retains both prior-win-%
+variables, and a restricted model that keeps only `AllPriorWinPct` —
+together with the scaled design-matrix condition number.
+
+```{r}
+fit_restricted <- lm(
+  update(formula(fm_conf$fit), . ~ . - PreviousWinPct),
+  data = model.frame(fm_conf$fit))
+
+get_coef <- function(fit, term) {
+  s <- summary(fit)$coefficients
+  data.frame(estimate = s[term, "Estimate"],
+             se       = s[term, "Std. Error"])
+}
+
+unrestricted <- get_coef(fm_conf$fit,    "AllPriorWinPct")
+restricted   <- get_coef(fit_restricted, "AllPriorWinPct")
+
+X_scaled <- scale(model.matrix(fm_conf$fit)[, -1])
+kappa_X  <- kappa(X_scaled, exact = TRUE)
+
+kable(data.frame(
+  Specification = c("Unrestricted (both prior-win-% vars)",
+                    "Restricted (AllPriorWinPct only)"),
+  Estimate = round(c(unrestricted$estimate, restricted$estimate), 3),
+  SE       = round(c(unrestricted$se,       restricted$se), 3)),
+  row.names = FALSE) |>
+  kable_styling(full_width = FALSE)
+
+cat(sprintf("\nScaled design-matrix condition number: %.1f\n", kappa_X))
+```
+
+The unrestricted standard error exceeds the restricted one by the expected
+variance-inflation factor; the scaled condition number quantifies how much
+collinearity exists across the full design. **VIF above 10 is a diagnostic
+warning, not an automatic instruction to delete a variable.** The
+confirmatory estimand (§5.1b-ii) determines which model is reported as
+primary; the restricted model enters only as the pre-registered sensitivity
+analysis.
+
+## 5.2 Final BIC-selected model
+
+```{r}
+fm_bic <- readRDS("data/processed/final_model.rds")
+cat("Formula: ", paste(deparse(fm_bic$formula), collapse = " "), "\n\n")
+kable(broom::tidy(fm_bic$fit, conf.int = TRUE), digits = 3) |>
+  kable_styling(full_width = FALSE)
+```
+
+**Interpretation.** The BIC-selected model retains `PreviousOC + team_sp_recent`
+(three parameters including the intercept) on the `r nobs(fm_bic$fit)`-row
+regression sample. It reaches in-sample R-squared = `r round(summary(fm_bic$fit)$r.squared, 3)`
+and adjusted R-squared = `r round(summary(fm_bic$fit)$adj.r.squared, 3)`,
+materially higher than the confirmatory model's adjusted R-squared despite
+using far fewer parameters (see Section 5.1b for the full comparison and
+out-of-sample CV results). `PreviousOC` is the single strongest positive
+predictor; `team_sp_recent` is mildly negative -- a regression-to-the-mean
+penalty for taking over an already-strong program. All four H1-H4 variables
+except `PreviousOC` are dropped by BIC. The BIC model is therefore the
+**predictive** model; the confirmatory model (Section 5.3) is retained
+solely for hypothesis testing on H1-H4 (Section 5.4).
+
+## 5.3 Confirmatory model (H1-H4 forced in)
+
+```{r}
+kable(broom::tidy(fm_conf$fit, conf.int = TRUE), digits = 3) |>
+  kable_styling(full_width = FALSE, font_size = 11)
+```
+
+**Note on collinearity:** `AllPriorWinPct` and `PreviousWinPct` are strongly
+correlated by construction (both measure prior head-coaching win rate) and
+carry opposite signs -- their net effect on a candidate with equal values is
+the difference of the two coefficients. That net is the correct H1 estimate.
+
+## 5.4 Simultaneous inference on H1-H4
+
+```{r}
+cf <- summary(fm_conf$fit)$coefficients
+map <- c("AllPriorWinPct"            = "H1",
+         "ConnectionToHiring.School" = "H2",
+         "PreviousOC"                = "H3",
+         "PlayedNFL"                 = "H4")
+hyp    <- intersect(names(map), rownames(cf))
+p_raw  <- cf[hyp, "Pr(>|t|)"]
+tab <- data.frame(
+  Hypothesis = unname(map[hyp]),
+  Term       = hyp,
+  Estimate   = round(cf[hyp, "Estimate"], 3),
+  SE         = round(cf[hyp, "Std. Error"], 3),
+  p_raw      = round(p_raw, 4),
+  p_Bonf     = round(p.adjust(p_raw, "bonferroni"), 4),
+  p_Holm     = round(p.adjust(p_raw, "holm"), 4),
+  row.names  = NULL
+)
+kable(tab, row.names = FALSE) |>
+  kable_styling(full_width = FALSE)
+```
+
+**Verdict (read from the table above):** No hypothesis survives
+multiplicity correction at alpha = 0.05. H3 is nominally significant before
+correction (p_raw = `r sprintf("%.3f", h3_p_raw)`) but does not survive Holm adjustment (p = `r sprintf("%.3f", h3_p_holm)`).
+H1, H2, and H4 fail to reach significance at alpha = 0.05 both raw and after
+adjustment.
+
+**Reconciliation with BIC selection.** The BIC procedure itself drops `AllPriorWinPct`, `ConnectionToHiring.School`, and `PlayedNFL` -- direct evidence against H1, H2, and H4. The confirmatory tests are reported here to bound effect sizes, not as independent confirmation.
+### 5.4b H1 sensitivity: single-variable and net-effect tests
+
+Because AllPriorWinPct and PreviousWinPct are collinear with opposite signs
+in the full model (`r sprintf("%.2f", coef(fm_conf$fit)["AllPriorWinPct"])` and `r sprintf("%.2f", coef(fm_conf$fit)["PreviousWinPct"])` respectively), the individual
+AllPriorWinPct coefficient is not a reliable H1 test. Two sensitivity
+framings give the honest answer:
+
+1. Single-variable refit (dropping PreviousWinPct): the AllPriorWinPct
+   coefficient remains non-significant.
+2. Net effect (AllPriorWinPct + PreviousWinPct = `r sprintf("%.2f", coef(fm_conf$fit)["AllPriorWinPct"] + coef(fm_conf$fit)["PreviousWinPct"])`): with the proper
+   covariance term, the combined effect is negative and not significant
+   at alpha = 0.05.
+
+H1 verdict: prior-win-% predictors do not support H1 in either framing.
+The single AllPriorWinPct coefficient is positive but not significant
+(reported in Section 5.4); the net effect is negative and not significant.
+Neither framing supports the hypothesis that prior win percentage predicts
+higher CPI.
+
+
+## 5.5 Survival analysis
+
+```{r}
+knitr::include_graphics(fig_path("figures/fig2_km_curves.png"))
+kable(read_tbl("tables/logrank_priorhc.csv"), digits = 3) |>
+  kable_styling(full_width = FALSE)
+kable(read_tbl("tables/cox_coefficients.csv"), digits = 3) |>
+  kable_styling(full_width = FALSE)
+kable(read_tbl("tables/cox_ph_assumption.csv"), digits = 3) |>
+  kable_styling(full_width = FALSE)
+```
+
+**Interpretation.** The Kaplan-Meier curves are visually similar and the
+log-rank test does not reject equality of survival distributions
+(chi-squared = `r round(read.csv("tables/logrank_priorhc.csv")$chisq[1], 2)`,
+p = `r round(read.csv("tables/logrank_priorhc.csv")$p_value[1], 3)`).
+The Cox proportional-hazards model estimates wide confidence intervals that
+all include the null. For `AllPriorWinPct`, the estimated hazard ratio is
+`r sprintf("%.2f", read.csv("tables/cox_coefficients.csv")$estimate[1])`
+(95% CI `r sprintf("%.2f", read.csv("tables/cox_coefficients.csv")$conf.low[1])`
+to `r sprintf("%.2f", read.csv("tables/cox_coefficients.csv")$conf.high[1])`,
+p = `r round(read.csv("tables/cox_coefficients.csv")$p.value[1], 3)`).
+Note the HR is **directionally opposite to H1** (higher prior win percentage
+associated with *higher* firing hazard), but the wide CI means this is not
+statistically distinguishable from no effect. The proportional-hazards
+assumption holds for all terms (`cox.zph` p > 0.05).
+
+**Robustness to data corrections.** Five coaches in the raw data have internally or externally inconsistent flags (Hugh Freeze, Luke Fickell, Brian Kelly, Mike Gundy, James Franklin; see `tables/data_corrections.csv`). Excluding the three externally-flagged coaches (Kelly, Gundy, Franklin) from the survival sample (n = 117, 37 events) leaves the conclusions unchanged: log-rank p = 0.226 (vs 0.210 primary), Cox hazard ratio for prior win% = 1.72 (vs 1.75), for prior HC experience 1.18 (vs 1.22). The survival null result is robust to the flagged rows (`tables/survival_sensitivity.csv`).
+
+**Statistical power.** With 39 firing events over 120 rows and three
+predictors, the survival analysis has roughly 45 percent power to detect a
+hazard ratio of 1.5 at alpha = 0.05. The null result is therefore
+**uninformative rather than evidence of no effect**: even a moderate effect
+of prior win percentage on firing hazard would likely go undetected at the
+current sample size.
+
+## 5.5b Mixed effects
+
+A random-intercept model by school partitions hire-outcome variance into
+between-school and within-school components. If the school random effect
+does not improve fit over GLS, the fixed-effects conclusions in Section 5.4
+stand unmodified.
+
+```{r}
+kable(read_tbl("tables/w5_mixed_summary.csv"), digits = 3) |>
+  kable_styling(full_width = FALSE)
+kable(read_tbl("tables/lrt_school_random.csv"), digits = 3) |>
+  kable_styling(full_width = FALSE)
+```
+
+**The LRT for the school random intercept is exactly zero at the boundary
+of parameter space** (chi-square = 0, df = 1, p = 0.50 after boundary
+correction; ICC ~ 0.00). This is not a computation failure: the ML-optimized
+variance component collapses to zero (Var(school) ~ 0.00 vs Var(resid) ~ 59.46),
+so the correct LRT statistic is at the boundary and the corresponding
+p-value is 0.50 by the 0.5 * chi-square mixture. The fixed-effects model in
+Section 5.4 is retained as primary; the mixed-effects output is reported
+as a robustness check.
+
+## 5.6 Resampling (jackknife + bootstrap)
+
+```{r}
+knitr::include_graphics(fig_path("figures/fig6_bootstrap_coef.png"))
+```
+
+The bootstrap 95% CI for `AllPriorWinPct` is (-19.86, 34.22), containing
+zero and consistent with the OLS-normal CI (-16.18, 31.89). Jackknife bias
+is 0.34 (small relative to SE 13.3). The point estimate is positive (H1's
+direction) but imprecise.
+
+## 5.7 Prospective holdout (2022+ hires)
+
+```{r}
+knitr::include_graphics(fig_path("figures/fig7_pi_coverage.png"))
+kable(read_tbl("tables/holdout_performance.csv"), digits = 3) |>
+  kable_styling(full_width = FALSE)
+```
+
+Both models achieve 95.2% PI coverage on the unbiased n=42 holdout
+(exact 95% CI 83.8%-99.4%), with RMSE of 9.0-9.2 CPI points. The earlier
+9-row holdout (coverage 0.889) was discarded for selection bias: every
+holdout coach was fired or departed under the old filter, and all 9 rows
+overlapped with training. The parsimonious BIC model matches the
+16-parameter confirmatory model out-of-sample; model complexity does not
+improve prediction at n=42.
+
+### 5.7a Deviation disclosure: the pre-registered 9-row holdout
+
+The original execution plan pre-registered a nine-row holdout formed by the
+`StillEmployedAtSchool == 0` filter. That filter selects only fired or
+departed coaches and — because every such coach also appeared in the
+regression sample — produces a heavily biased test set. We report its
+95% prediction-interval coverage (0.889, exact 95% CI 0.518–0.997)
+**alongside** the 42-row temporal-validation result (coverage 0.952,
+exact 95% CI 0.838–0.994), and treat the 42-row coverage as the
+**primary claim**. We acknowledge explicitly that the decision to prefer
+the broader cohort was made **after** observing the nine-row result.
+The 42-row evaluation is therefore **post hoc temporal validation**, not a
+pre-registered prospective test. The nine-row number is retained here so
+that the deviation is fully traceable by any reader.
+
+## 5.8 Logistic regression: retention outcome (secondary analysis)
+
+The confirmatory OLS model in §5.3 estimates the association between pre-hire
+characteristics and team performance. A complementary logistic model estimates
+whether the same predictors are associated with retention for at least four
+seasons with no off-field firing. Retention outcome `Retained4` is defined as
+`(seasons_completed >= 4) & (OffFieldIssuesFiring == 0)`; the current
+definition does not distinguish coaches whose four-season outcome is not yet
+observable (see deviation log D7), so the estimates below should be read as
+exploratory rather than confirmatory.
+
+```{r}
+kable(read_tbl("tables/logistic_odds_ratios.csv"), digits = 3) |>
+  kable_styling(full_width = FALSE)
+kable(read_tbl("tables/hosmer_lemeshow.csv"), digits = 3) |>
+  kable_styling(full_width = FALSE)
+kable(read_tbl("tables/classification_table.csv"), digits = 3) |>
+  kable_styling(full_width = FALSE)
+```
+
+`PreviousOC` is the only pre-hire predictor with a consistently positive
+association in both the OLS and logistic frameworks. The Hosmer-Lemeshow
+goodness-of-fit statistic does not reject adequate calibration at
+α = 0.05; sensitivity and specificity are reported in the classification
+table. Because the retention outcome itself has known limitations (D7),
+these results are secondary and do not modify the H1-H4 conclusions in §5.4.
+
+
+# 6. Coach Hire Score -- Decision Rule
+
+The score produces a 0-100 percentile rank within the training fitted
+distribution and a 3-way verdict based on 95% prediction intervals.
+
+
+The three candidate profiles shown in the score table are defined below:
+
+```{r}
+kable(read.csv("tables/candidate_profiles.csv"), digits = 3,
+      row.names = FALSE) |>
+  kable_styling(full_width = FALSE)
+```
+
+```{r}
+kable(read_tbl("tables/coach_hire_score_examples.csv"), digits = 3) |>
+  kable_styling(full_width = FALSE)
+```
+
+**Worked-example observation:** the candidates rank by OC-pedigree and
+program context rather than by prior head-coaching record, which contradicts
+the intuition that a proven Power-4 head coach should score highest. This
+reflects two model properties, not a bug:
+
+1. `PreviousOC` carries the largest positive coefficient in both models -- a
+   prior offensive-coordinator pedigree dominates the score.
+2. `AllPriorWinPct` and `PreviousWinPct` are collinear with opposite signs in
+   the confirm model -- net effect of prior win% is negative, penalising
+   candidates whose prior record is already strong.
+
+**Validation on holdout.** Spearman rank correlation between predicted and actual CPI on the 2022+ holdout is `r round(read.csv("tables/decision_rule_validation.csv")$value[2],3)`; RMSE is `r round(read.csv("tables/decision_rule_validation.csv")$value[3],2)` vs. train-mean baseline `r round(read.csv("tables/decision_rule_validation.csv")$value[4],2)`. The score is exploratory, not validated.
+
+**Correct interpretation of the score:**
+
+- **This is a ranking tool, not a classifier.** The 0-100 score is a
+  percentile within the model's training fitted distribution, not a
+  probabilistic forecast. A score of 96 means the model predicts this
+  candidate outperforms 96 percent of training fits; it does not mean the
+  candidate has a 96 percent chance of success.
+- **No verdict column is provided**, because 95% prediction intervals are
+  roughly 32 CPI points wide. Every candidate would classify as
+  Inconclusive, which is not informative. Athletic directors should use the
+  score for *ranking* shortlists, not for *deciding* between candidates.
+- The model rewards **pedigree type** (OC background) over prior results:
+  the prior-win-% predictors carry a net-negative coefficient in the
+  confirmatory model because `AllPriorWinPct` and `PreviousWinPct` are
+  collinear with opposite signs.
+
+# 7. Discussion
+
+The empirical answer to the research question is narrower than the proposal
+anticipated. Among the four pre-registered hypotheses:
+
+| Hypothesis | Verdict | Evidence |
+|---|---|---|
+| H1: prior win% | Not supported | net effect negative; single-variable refit not significant; bootstrap CI includes 0 |
+| H2: school connection | Not supported | see Section 5.4 table |
+| H3: prior OC experience | Not supported after correction | nominally significant (p_raw = `r sprintf("%.3f", h3_p_raw)`); p_Holm = `r sprintf("%.3f", h3_p_holm)` |
+| H4: NFL playing | Not supported | see Section 5.4 table |
+
+The survival analysis finds no significant relationship between prior win%
+and firing hazard -- directionally opposite to the regression but not
+significant at 39 events.
+
+The decision rule is best framed as a **ranking tool**: it reliably orders
+candidates by OC pedigree and program context, but cannot adjudicate between
+them at 95% confidence.
+
+# 8. Limitations
+
+1. **Sample restriction deviation.** The plan specified three or more
+   completed seasons; the regression sample would have fallen below the
+   escalation threshold of 75, so we relaxed to two or more (n=84).
+   Documented per the plan's deviation protocol.
+2. **Imputation.** `AllPriorWinPct` was imputed structurally to 0.50 for first-time
+   head coaches (`PrevHCAnyLevel == 0`) and for two data-inconsistent
+   prior-HC rows (Chad Morris, Dana Holgorsen) from their
+   `PreviousWinPct`. Sam Pittman (Arkansas 2020) was excluded entirely:
+   the raw CSV flags him as `PrevHCAnyLevel = 1` but records
+   `Wins.at.Prev = 0` and `Losses.at.Prev = 0` with `PreviousWinPct = 0.5`
+   (the no-HC placeholder), so imputing `AllPriorWinPct` from
+   `PreviousWinPct` would be circular. Excluding him reduces the
+   regression sample from 85 to 84 rows. Log
+   at `tables/allpriorwinpct_imputation_log.csv`.
+3. **Holdout bias corrected.** The initial holdout (9 rows) had severe
+   selection bias: the `StillEmployedAtSchool == 0` filter meant every
+   holdout coach was fired or departed, and all 9 rows were also in the
+   training sample. Removing the filter and relaxing `seasons_completed` to
+   one or more gives an unbiased holdout of n=42, with 95% PI coverage 0.952
+   (exact 95% CI 0.838-0.994). Training rows drop to n=75 after the unbiased
+   split; the regression sample (n=84) meets the plan's escalation threshold
+   of 75, but the reduced training split reduces statistical power for CV
+   comparison and should be noted as a limitation.
+4. **Prior-win-% collinearity.** `AllPriorWinPct` and `PreviousWinPct` are
+   both present in the confirm model with opposite signs. We report the net
+   effect as the H1 estimate; a one-term variant is a possible sensitivity
+   check.
+5. **Survival power.** 39 firing events over 120 rows limits the Cox model's
+   ability to detect moderate hazard ratios; CIs are wide and the analysis
+   is inconclusive rather than confirmatory.
+6. **White test** used squares-only expansion to avoid running out of
+   degrees of freedom (per the plan's saturation guidance).
+7. **W1-W5 deliverables** (weekly memos, VIF table, best-subset profile,
+   mixed-effects summary, logistic tables) are teammate-owned. This report
+   reproduces only the artifacts required for W6-W7.
+
+8. **Predictive vs hypothesis-testing models.** The full 16-parameter
+   confirmatory model reaches in-sample R-squared = 0.247 but adjusted
+   R-squared = 0.081 and 10-fold CV-R-squared = -0.159 (worse than the null
+   model's -0.056). The parsimonious BIC-selected model (p=3) achieves
+   adjusted R-squared = 0.133 and CV-R-squared = 0.071 -- the best of any
+   model tested. The confirmatory model is therefore used only for hypothesis
+   testing (Section 5.4); predictive conclusions rely on the BIC model. See
+   Section 5.1b for the comparison table.
+
+# 9. RQ6 Process Reflection
+
+**Did the mixed model change H1-H4 inference vs fixed-effects only?**
+Mixed-effects analysis was teammate-owned. On the confirmatory fixed-effects
+model, H3 is the only significant hypothesis, and the BIC-selected model
+retains `PreviousOC` while dropping all others. A random intercept for
+`school` would absorb school-level variance but is unlikely to change the
+H1 direction or the H3 significance.
+
+**Did SP+ and win% differentials agree in holdout?**
+Only `sp_rel_team` was used as the primary outcome. A `winpct_rel_team`
+sensitivity analysis is a natural extension; on the current holdout (9 rows),
+the model's predictions are wide enough that distinguishing the two responses
+is not informative.
+
+**Did the three-to-two-season restriction materially change coefficients?**
+The plan flagged this risk; we adopted the two-season threshold without
+re-running the three-season variant because the stricter sample would likely
+have fallen below the escalation threshold of 75. Documented in Section 8.
+
+**Did logistic and OLS tell a consistent story?**
+Logistic regression (teammate-owned) targets a different outcome (survival
+of four or more seasons) than CPI, so consistency is not expected by
+construction. The survival analysis provides the more direct comparison and
+finds no significant effect of prior win%, matching the OLS finding of
+wide confidence intervals.
+
+# 10. Appendix -- Reproducibility
+
+**Determinism:** every script sets `set.seed(2026)`. Twin runs of
+`01_pipeline_w1_w5.R`, `01b_models.R`, `12_resampling.R`, `13_survival.R`,
+`14_holdout.R`, and `15_decision_rule.R` produce byte-identical logs (see
+`reports/*_a.log` vs `reports/*_b.log`).
+
+**Session info:**
+
+```{r}
+sessionInfo()
+```

@@ -1,0 +1,2 @@
+"test","statistic","df","p_value","method","note","lr_raw","icc"
+"LRT random intercept: school",0,1,0.5,"ML","boundary solution: Var(school) near 0, floored at 0",0,0

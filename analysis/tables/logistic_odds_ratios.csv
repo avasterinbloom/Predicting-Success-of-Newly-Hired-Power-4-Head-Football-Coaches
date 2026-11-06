@@ -1,0 +1,8 @@
+"term","OR","LCL","UCL"
+"(Intercept)",0.411,0.027,6.201
+"AllPriorWinPct",9.659,0.127,732.056
+"PreviousOC",0.77,0.179,3.304
+"PreviousDC",1.434,0.436,4.711
+"ConnectionToHiring.School",2.095,0.702,6.254
+"PlayedNFL",0.875,0.19,4.025
+"sp_prev_rel",0.995,0.921,1.076

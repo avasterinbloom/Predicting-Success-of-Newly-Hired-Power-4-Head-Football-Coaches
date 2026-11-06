@@ -1,0 +1,6 @@
+"metric","value"
+"n_holdout",42
+"Spearman_rho",0.189
+"RMSE_model",8.952
+"RMSE_train_mean_baseline",8.874
+"beat_baseline_10pct",0

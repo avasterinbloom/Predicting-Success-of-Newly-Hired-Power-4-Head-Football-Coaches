@@ -1,0 +1,5 @@
+"model","cv_mse","cv_R2"
+"Null",74.2281,-0.0558
+"PreviousOC_only",67.032,0.0466
+"BIC_selected",65.3337,0.0708
+"Confirmatory",81.4808,-0.1589

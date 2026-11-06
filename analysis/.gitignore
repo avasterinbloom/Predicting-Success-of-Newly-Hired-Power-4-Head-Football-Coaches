@@ -1,0 +1,11 @@
+data/processed/
+figures/
+reports/*.log
+reports/knit_a.log
+reports/knit_b.log
+archive/
+reference/
+.Rhistory
+.Rproj.user
+.RData
+reports/final_report.knit.md

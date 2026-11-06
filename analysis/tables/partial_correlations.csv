@@ -1,0 +1,17 @@
+"term","partial_r"
+"(Intercept)",0.0083
+"PrevHCAnyLevel",-0.0324
+"AllPriorWinPct",0.0757
+"PreviousWinPct",-0.1153
+"PreviousOC",0.2432
+"PreviousDC",0.005
+"SideOfBallO",-0.0198
+"ConnectionToHiring.School",-0.0214
+"PlayedNFL",-0.1481
+"AgeAtHiringMinus50",-0.1066
+"NFLCoachingExperience",0.043
+"WonCCasHCany",0.1818
+"Conf.LeavingP4",-0.0146
+"team_sp_recent",-0.2661
+"PromoteWithin",0.0993
+"PrevHCAnyLevel:sp_prev_rel",0.0587

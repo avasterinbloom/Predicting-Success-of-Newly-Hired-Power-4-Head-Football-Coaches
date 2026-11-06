@@ -1,0 +1,3 @@
+"test","statistic","df","p_value"
+"Breusch-Pagan",15.7557564233901,15,0.398467383524048
+"White (squares only)",22.5598020778571,30,0.832915138658142
