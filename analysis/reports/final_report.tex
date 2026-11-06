@@ -1,320 +1,889 @@
-% Final report for the Coaching Hires Regression Project.
-% Compile from this directory twice with: xelatex -interaction=nonstopmode final_report.tex
-% final_report.Rmd and final_report.html are retained unchanged from the supplied archive.
 \documentclass[11pt,a4paper]{article}
-\usepackage[a4paper,margin=1.8cm,headheight=14pt]{geometry}
-\usepackage{fontspec}
-\setmainfont{Linux Libertine O}
-\setsansfont{TeXGyreHeros}
-\setmonofont{DejaVu Sans Mono}[Scale=0.82]
-\usepackage{amsmath,amssymb,booktabs,tabularx,array,graphicx,float,placeins}
-\usepackage{enumitem,microtype,xcolor,fancyhdr,titlesec,caption,hyperref,url,setspace,ragged2e}
-\definecolor{navy}{HTML}{17365D}
-\definecolor{blue}{HTML}{2F5597}
-\hypersetup{colorlinks=true,linkcolor=blue,citecolor=blue,urlcolor=blue,
- pdftitle={Predicting Success of College-Football Coaching Hires},
- pdfauthor={Group RT, BSDS},pdfsubject={Regression analysis and decision framework}}
-\graphicspath{{../figures/}}
-\setlength{\parindent}{0pt}\setlength{\parskip}{4pt plus 1pt minus 1pt}
-\setlength{\tabcolsep}{4pt}\renewcommand{\arraystretch}{1.08}
-\setlist[itemize]{leftmargin=1.35em,itemsep=1pt,topsep=2pt}
-\setlist[enumerate]{leftmargin=1.6em,itemsep=2pt,topsep=2pt}
-\captionsetup{font=small,labelfont=bf,skip=3pt}
-\titleformat{\section}{\large\bfseries\color{navy}}{\thesection}{0.5em}{}
-\titleformat{\subsection}{\normalsize\bfseries\color{blue}}{\thesubsection}{0.5em}{}
-\titlespacing*{\section}{0pt}{9pt}{3pt}\titlespacing*{\subsection}{0pt}{6pt}{2pt}
-\pagestyle{fancy}\fancyhf{}
-\lhead{\footnotesize Coaching Hires: Regression-Based Decision Framework}
-\rhead{\footnotesize Group RT}\cfoot{\footnotesize\thepage}
-\renewcommand{\headrulewidth}{0.35pt}\setstretch{1.04}
-\newcolumntype{Y}{>{\RaggedRight\arraybackslash}X}
-\newcommand{\cpi}{\textsc{CPI}}
-\newcommand{\tabnote}[1]{\vspace{2pt}{\parbox{\linewidth}{\footnotesize\textit{Note.} #1}}}
+
+% ---------- Packages ----------
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{float}
+\usepackage{xcolor}
+\usepackage{enumitem}
+\usepackage{setspace}
+\usepackage[colorlinks=true,linkcolor=blue!50!black,urlcolor=blue!50!black]{hyperref}
+
+\setstretch{1.15}
+\setlength{\parskip}{0.5em}
+\setlength{\parindent}{0pt}
+
+% ---------- Helper macros ----------
+% Variable / file names (safe for underscores and dots)
+\newcommand{\var}[1]{\texttt{\detokenize{#1}}}
+% Placeholder for a number or text to be filled from R output
+\newcommand{\ph}[1]{\textcolor{red!70!black}{[\textbf{#1}]}}
+% Placeholder box for a figure. Replace with \includegraphics{figures/<name>.png}
+\newcommand{\figph}[3]{%
+  \begin{figure}[H]
+    \centering
+    \fbox{\parbox{0.88\textwidth}{\centering\vspace{2.5cm}
+      \textbf{Figure placeholder}\\[2pt]\var{#1}\vspace{2.5cm}}}
+    \caption{#2}\label{#3}
+  \end{figure}}
+
+\newcommand{\E}{\mathbb{E}}
+\newcommand{\Var}{\operatorname{Var}}
+\newcommand{\Cov}{\operatorname{Cov}}
+
+\title{\textbf{Predicting Success of Newly Hired Power-4 Head Football Coaches}\\[4pt]
+\large A Regression, Model-Selection and Survival Analysis}
+\author{Project Report\\[2pt] {Anant Prateek Tanishq}}
+\date{}
 
 \begin{document}
-
-% TITLE PAGE: included in the 20-page limit
+\maketitle
 \thispagestyle{empty}
-\vspace*{0.65cm}
-{\color{navy}\Large\bfseries BSDS PROJECT REPORT}\par
-\vspace{0.65cm}
-{\color{navy}\Huge\bfseries Predicting Success of College-Football Coaching Hires}\par
-\vspace{0.25cm}
-{\Large A Regression-Based Decision Framework}\par
-\vspace{0.55cm}\hrule\vspace{0.45cm}
-\begin{tabularx}{\linewidth}{@{}>{\bfseries}p{3.2cm}Y@{}}
-Programme & BSDS\\
-Group folder & RT (replace with the official group name if different)\\
-Research question & Do observable pre-hire characteristics predict subsequent team performance?\\
-Primary outcome & Project-defined Coach Performance Index: team SP+ relative to FBS mean (\verb|sp_rel_team|)\\
-Data window & Hires beginning 1999--2026; completed-hire outcomes observed through 2025\\
-Report date & 3 November 2026\\
-\end{tabularx}
-\vspace{0.45cm}\hrule\vspace{0.35cm}
-\section*{Abstract}
-This project examines whether observable pre-hire characteristics predict the subsequent on-field performance of college-football head coaches. The supplied team-compiled dataset contains 132 hire records and 60 fields. The primary regression analysis uses 84 eligible completed hires; the survival analysis uses 120 completed hires; and a separate temporal holdout evaluates 42 hires beginning in 2022. We distinguish a 15-slope confirmatory linear model, retained to test four stated hypotheses, from a parsimonious Bayesian information criterion (BIC)-selected model used for prediction. The confirmatory model explains 24.7\% of in-sample variation but has adjusted \(R^2=0.081\) and 10-fold cross-validated \(R^2=-0.159\), worse than the null benchmark. The BIC-selected two-predictor model reaches cross-validated \(R^2=0.071\), a modest result. Prior offensive-coordinator experience is nominally associated with higher CPI, but none of the four primary hypotheses survives Holm correction. The 2022+ holdout does not demonstrate improvement over a training-mean baseline. Mixed-effects and holdout result discrepancies are disclosed rather than silently resolved.
 
-\textbf{Overall conclusion.} The analysis provides a transparent description of candidate signals in this dataset, but it does not establish a validated predictor of coaching success. The Coach Hire Score is exploratory and should not be used as a stand-alone hiring rule.
-\vfill
-\small The report is within the professor's 20-page limit including references and appendices. The companion archives contain the raw dataset, processed data, R scripts, helper code, figures, full numerical result tables, and supporting records.
-\newpage
+\begin{abstract}
+Universities spend large sums hiring head football coaches, yet it is unclear which information available \emph{before} the hire actually predicts how well the coach will perform. Using a dataset of \ph{132} coach hires and \ph{60} variables, we model the coach's impact on team strength (\var{sp_rel_team}) using linear regression, and we model retention and tenure using logistic regression and survival analysis. We test the regression assumptions, treat heteroscedasticity and multicollinearity, select a parsimonious model with information criteria and penalised methods, check its stability using the bootstrap and jackknife, account for school-level clustering with mixed models, and validate the model on a prospective holdout of hires from 2022 onward. The best model reaches a cross-validated $R^2$ of \ph{0.0708} and a prediction-interval coverage of \ph{0.952(or 95.2 \%)} on the holdout. The main predictors were PreviousOC (previous offensive coordinator experience) and team\_sp\_recent (recent team SP+ performance context). We conclude with a simple ``Coach Hire Score'' decision rule. \href{https://github.com/avasterinbloom/Predicting-Success-of-Newly-Hired-Power-4-Head-Football-Coaches/upload/main}{Github Repo}
+\end{abstract}
 
-\tableofcontents
-\newpage
+% =====================================================================
+\section{Introduction and Objectives}
+% =====================================================================
+A head coach is one of the most visible and costly hires a Power-4 football programme makes. Athletic directors usually rely on reputation and intuition. This project asks whether a statistical model built only on \emph{pre-hire} information can predict the coach's later success.
 
-\section{Introduction and Research Questions}
-College-football head-coaching appointments are high-stakes decisions made under uncertainty. A candidate's prior record, coordinator experience, playing background, relationships with the hiring institution, and the quality of the inherited programme may all be relevant. The statistical task is not merely to rank biographies retrospectively, but to assess whether pre-hire information has a stable association with a clearly defined post-hire performance outcome.
+\subsection{Research questions}
+\begin{enumerate}[label=\textbf{Q\arabic*.}]
+  \item Which pre-hire characteristics (prior head-coaching record, coordinator background, NFL experience, age, ties to the school, recent team strength) are associated with a coach's impact on the team?
+  \item Do the standard linear-model assumptions hold, and how should violations be handled?
+  \item Is the selected model stable under resampling, and does it predict genuinely new hires?
+  \item Does clustering of hires within schools or conferences matter?
+  \item Do the same factors predict whether a coach is retained for four seasons and how long his tenure lasts?
+\end{enumerate}
 
-The primary research question is: \textbf{How well do observable pre-hire characteristics predict the project-defined Coach Performance Index (CPI) of a college-football head-coaching hire?} The response is \verb|sp_rel_team|, defined in the project data dictionary as the team's SP+ rating relative to the FBS mean. A win-percentage differential is retained as a secondary outcome for a holdout sensitivity analysis.
+\subsection{Outcomes studied}
+\begin{itemize}
+  \item \textbf{Primary outcome:} \var{sp_rel_team}, the coach-era SP+ rating relative to the team's level before the hire (referred to as CPI in our scripts). Positive values mean the team improved relative to its previous level.
+  \item \textbf{Retention outcome:} \var{Retained4}, a binary indicator equal to 1 if the coach completed at least four seasons without leaving for off-field reasons.
+  \item \textbf{Tenure outcome:} number of seasons until the coach is fired (right-censored otherwise).
+\end{itemize}
 
-\begin{table}[H]\centering\small
-\caption{Primary hypotheses specified for confirmatory inference}
-\begin{tabularx}{\linewidth}{@{}lYlY@{}}
-\toprule Hypothesis & Predictor & Expected sign & Interpretation\\\midrule
-H1 & Prior head-coaching win percentage (\verb|AllPriorWinPct|) & Positive & Stronger prior HC record predicts higher CPI.\\
-H2 & Connection to hiring school (\verb|ConnectionToHiring.School|) & Positive & Prior institutional connection predicts higher CPI.\\
-H3 & Prior offensive-coordinator experience (\verb|PreviousOC|) & Positive & Previous OC experience predicts higher CPI.\\
-H4 & NFL playing experience (\verb|PlayedNFL|) & Positive & Prior NFL playing experience predicts higher CPI.\\
-\bottomrule\end{tabularx}\end{table}
+\subsection{Report structure}
+Section~\ref{sec:data} describes the data and preparation. Section~\ref{sec:theory} gives the statistical theory behind every method used. Section~\ref{sec:results} presents the results. Section~\ref{sec:decision} describes the decision rule. Sections~\ref{sec:discussion} and~\ref{sec:conclusion} discuss limitations and conclude.
 
-Additional analyses compare model-selection methods, assess survival and retention outcomes, and develop an interpretable candidate-ranking score. These secondary exercises do not replace the confirmatory H1--H4 tests.
+% =====================================================================
+\section{Data}\label{sec:data}
+% =====================================================================
+\subsection{Source and structure}
+The raw file (\var{data/raw/data.csv}) has one row per coach hire, with \ph{132} rows and \ph{60} columns. The variables fall into the groups in Table~\ref{tab:vargroups}.
 
-\section{Data, Sources, and Sample Construction}
-\subsection{Dataset and provenance}
-The raw dataset is a project-compiled CSV with \textbf{132 rows and 60 columns}. It contains coach identity and career-history variables, hiring-school and season identifiers, programme-performance measures, and outcome indicators. The \verb|Wikipedia| column stores a coach-profile URL for every record (110 unique URLs across the 132 rows). The team assembled the season-level SP+ and win-percentage quantities used to construct the outcome and programme-context variables.
+\begin{table}[H]
+\centering
+\caption{Groups of variables in the dataset.}\label{tab:vargroups}
+\small
+\begin{tabular}{@{}p{3.2cm}p{11cm}@{}}
+\toprule
+\textbf{Group} & \textbf{Variables (examples)}\\
+\midrule
+Identity & \var{name}, \var{school}, \var{first_season}, \var{last_season}, \var{Conf.Hired}\\
+Prior career & \var{PrevHCAnyLevel}, \var{PreviousOC}, \var{PreviousDC}, \var{SideOfBall}, \var{NFLCoachingExperience}, \var{numb_years_Coord_HC}\\
+Prior record & \var{PreviousWinPct}, \var{AllPriorWinPct}, \var{Wins.at.Prev}, \var{Losses.at.Prev}\\
+Achievements & \var{WonCCasHCany}, \var{WonNCasHCany}, \var{WonCCasCoordAny}\\
+Ties & \var{ConnectionToHiring.School}, \var{Regional.Ties}, \var{PromoteWithin}, \var{SameConf}\\
+Personal & \var{Birth.Year}, \var{AgeAtHiringMinus50}, \var{PlayedNFL}, \var{Played.Power.4}\\
+Outcomes & \var{Fired}, \var{OffFieldIssuesFiring}, \var{StillEmployedAtSchool}, \var{WinsPostHire}\\
+Performance & \var{coach_sp}, \var{sp_rel_team}, \var{winpct_rel_team}, \var{srs_rel_team}\\
+Team context & \var{team_sp_prev}, \var{team_sp_recent}, \var{sp_prev_rel}\\
+\bottomrule
+\end{tabular}
+\end{table}
 
-\textbf{Downloadable data source.} The exact CSV used by the analysis is distributed alongside this report at \href{../data/raw/data.csv}{\texttt{analysis/data/raw/data.csv}} and is included in both ZIP archives. Its SHA-256 digest is \texttt{059dc4c7186128d431ade38213f70e3bf044f3a18f99e466704cb12fe63a3d81}, recorded in \verb|data/raw/data.csv.sha256|. This is a team-compiled dataset; the report does not claim that one public downloadable source file exists. Coach-profile links are preserved at record level, but a complete source ledger mapping every historical SP+ input to its original publication is absent. This is a material data-provenance limitation and should be corrected before external replication or consequential use.
+Many numeric columns are stored as text in the raw file. A helper function (\var{auto_num}) converts a character column to numeric whenever every non-missing entry is numeric.
 
-\subsection{Outcome, predictors, and sample flow}
-The primary response \verb|sp_rel_team| is the programme's SP+ relative to the FBS mean. \verb|team_sp_recent| is prior programme SP+ context, while \verb|sp_prev_rel| describes the coach's prior-role SP+ relative to the FBS mean. Other predictors include prior HC status, prior win percentages, coordinator roles, playing/NFL coaching experience, age at hire, conference movement, prior championship, and internal promotion. \verb|winpct_rel_team| is the secondary outcome. Definitions are supplied in \verb|data/README.md|.
+\subsection{Sample restriction}
+To measure a coach's effect we need enough seasons of data. The analysis sample (\var{reg_df}) keeps coaches who
+\begin{itemize}
+  \item completed at least two seasons (\var{seasons_completed} $=$ \var{last_season} $-$ \var{first_season} $+1\ge 2$), and
+  \item either left the school or were hired in 2021 or earlier (\var{StillEmployedAtSchool}$=0$ or \var{first_season}$\le 2021$).
+\end{itemize}
+This leaves \ph{84} observations. One coach (Sam Pittman, Arkansas) was excluded because he was flagged as a prior head coach but had no recorded prior wins or losses, so his prior win percentage was a placeholder rather than real data. Imputing from it would have been circular.
 
-\begin{table}[H]\centering\small
-\caption{Analysis populations and their distinct purposes}
-\begin{tabularx}{\linewidth}{@{}l r Y@{}}\toprule
-Population & \(n\) & Construction and use\\\midrule
-Raw file & 132 & All compiled hire records, including 12 speculative 2026 hires.\\
-Completed-hire frame & 120 & A last season is observed; used for tenure/survival analysis.\\
-Regression sample & 84 & At least two completed seasons, project employment-status filter, and Sam Pittman excluded for a prior-HC coding inconsistency.\\
-Temporal holdout & 42 & Hires beginning in 2022 or later with observed CPI.\\
-Holdout training set & 75 & Regression records after removing holdout identities.\\\bottomrule
-\end{tabularx}\end{table}
+\subsection{Handling missing values}
+\begin{itemize}
+  \item \var{AllPriorWinPct} and \var{PreviousWinPct} are missing by construction for first-time head coaches (\var{PrevHCAnyLevel}$=0$). They are set to a neutral $0.50$.
+  \item \var{sp_prev_rel} is missing for coaches without a previous head job. It is filled with the sample mean. In the model it enters only through the interaction \var{PrevHCAnyLevel:sp_prev_rel}, so the filled value is multiplied by zero for first-time head coaches.
+  \item \ph{2} prior head coaches had missing \var{AllPriorWinPct} and were filled from \var{PreviousWinPct}; these rows are logged in \var{tables/allpriorwinpct_imputation_log.csv}.
+\end{itemize}
 
-The original plan specified at least three completed seasons; this was relaxed to two to preserve the planned minimum analysis size. The regression construction also retains a hire when \verb|StillEmployedAtSchool = 0| or \verb|first_season| is at most 2021. This condition can select recent hires based on observed tenure/employment status and is therefore a source of selection bias, not a neutral restriction. The 12 speculative 2026 hires have no observed last season and are excluded from analyses requiring completed outcomes.
+\subsection{Data-quality flags}
+Five coaches had inconsistent employment fields (Table~\ref{tab:flags}). Two were kept and flagged. Three were excluded in a sensitivity analysis of the survival model.
 
-\subsection{Missing data and integrity checks}
-The raw file has 34 missing values in \verb|AllPriorWinPct|, largely structural for first-time head coaches; these are set to 0.50 as a neutral placeholder. Two anomalous prior-HC cases (Chad Morris and Dana Holgorsen) are filled from \verb|PreviousWinPct|. Sam Pittman is excluded because the file flags him as a prior head coach while recording zero prior wins and losses and a 0.50 no-prior-HC placeholder; imputing from that value would be circular. Missing \verb|sp_prev_rel| values (37 in the raw file) are imputed to the regression-sample mean. These deterministic imputations are pragmatic and do not propagate imputation uncertainty.
+\begin{table}[H]
+\centering
+\caption{Flagged records (from \var{data_corrections.csv}).}\label{tab:flags}
+\small
+\begin{tabular}{@{}lll@{}}
+\toprule
+\textbf{Coach (school)} & \textbf{Issue} & \textbf{Action}\\
+\midrule
+Hugh Freeze (Auburn) & \var{Fired}=1 and \var{StillEmployed}=1 & Retained, flagged\\
+Luke Fickell (Wisconsin) & \var{Fired}=1 and \var{StillEmployed}=1 & Retained, flagged\\
+Brian Kelly (LSU) & External record disagrees & Excluded in sensitivity\\
+Mike Gundy (Oklahoma State) & External record disagrees & Excluded in sensitivity\\
+James Franklin (Penn State) & External record disagrees & Excluded in sensitivity\\
+\bottomrule
+\end{tabular}
+\end{table}
 
-Five records are flagged in \verb|tables/data_corrections.csv|. Hugh Freeze and Luke Fickell have internal contradictions between firing and employment-status indicators. Brian Kelly, Mike Gundy, and James Franklin have externally flagged employment-status inconsistencies. The primary data retain these records as coded; a survival sensitivity analysis excludes the three externally flagged coaches. Full row-level flags and inclusion/exclusion lists are supplied.
+\subsection{Descriptive statistics}
+\begin{table}[H]
+\centering
+\caption{Descriptive statistics of key numeric variables (\var{descriptive_stats.csv}).}\label{tab:desc}
+\begin{tabular}{@{}lrrr@{}}
+\toprule
+\textbf{Variable} & \textbf{Mean} & \textbf{SD} & \textbf{Median}\\
+\midrule
+\var{sp_rel_team} & \ph{-1.96} & \ph{8.44} & \ph{-2.15} \\
+\var{winpct_rel_team} & \ph{-0.02} & \ph{0.15} & \ph{-0.01} \\
+\var{AllPriorWinPct} & \ph{0.64} & \ph{0.17} & \ph{0.66} \\
+\var{PreviousWinPct} & \ph{0.58} & \ph{0.12} & \ph{0.50} \\
+\var{AgeAtHiringMinus50} & \ph{-3.89} & \ph{6.86} & \ph{-5.00} \\
+\var{team_sp_recent} & \ph{7.83} & \ph{8.91} & \ph{9.42} \\
+\bottomrule
+\end{tabular}
+\end{table}
 
-\section{Statistical Methods}
-\subsection{Confirmatory linear model}
-The inferential specification is an ordinary least-squares model with 15 slope terms and an intercept (16 fitted parameters):
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.8\textwidth]{figures/fig1_cpi_by_hire_type.png}
+    \caption{Distribution of the outcome $\var{sp\_rel\_team}$ by type of hire.}
+    \label{fig:cpi}
+\end{figure}
+
+\subsection{The full model formula}
+All regression models use the following full (``confirmatory'') specification:
 \begin{align*}
-\mathrm{CPI}_i={}&\beta_0+\beta_1\mathrm{PrevHC}_i+\beta_2\mathrm{AllPriorWinPct}_i+\beta_3\mathrm{PreviousWinPct}_i\\
-&+\beta_4\mathrm{PreviousOC}_i+\beta_5\mathrm{PreviousDC}_i+\beta_6\mathrm{SideOfBall}_i+\beta_7\mathrm{Connection}_i\\
-&+\beta_8\mathrm{PlayedNFL}_i+\beta_9\mathrm{Age50}_i+\beta_{10}\mathrm{NFLCoaching}_i\\
-&+\beta_{11}(\mathrm{PrevHC}_i\times\mathrm{PriorSP+}_i)+\beta_{12}\mathrm{WonCC}_i+\beta_{13}\mathrm{LeavingP4}_i\\
-&+\beta_{14}\mathrm{RecentTeamSP+}_i+\beta_{15}\mathrm{PromoteWithin}_i+\epsilon_i.
+\texttt{sp\_rel\_team} \sim\;& \texttt{PrevHCAnyLevel} + \texttt{AllPriorWinPct} + \texttt{PreviousWinPct} + \texttt{PreviousOC} + \texttt{PreviousDC}\\
+&+ \texttt{SideOfBall} + \texttt{ConnectionToHiring.School} + \texttt{PlayedNFL} + \texttt{AgeAtHiringMinus50}\\
+&+ \texttt{NFLCoachingExperience} + \texttt{PrevHCAnyLevel:sp\_prev\_rel} + \texttt{WonCCasHCany}\\
+&+ \texttt{Conf.LeavingP4} + \texttt{team\_sp\_recent} + \texttt{PromoteWithin}.
 \end{align*}
-Binary predictors use 0 as the reference level. This full model is retained for the stated H1--H4 inference even though it is not the strongest predictive model. H1 is operationalised as the net contrast \(H_0:\beta_{\mathrm{AllPriorWinPct}}+\beta_{\mathrm{PreviousWinPct}}=0\), because the two win-percentage variables overlap conceptually and have opposite fitted signs.
 
-\subsection{Model selection and validation}
-A bidirectional BIC search starts from the null model and considers the full specification as its upper scope, using penalty \(k=\log(n)\). AIC stepwise, best-subset criteria, ridge, principal-components regression (PCR), LASSO, and elastic net provide secondary checks. Ten-fold cross-validation uses fixed seed 2026 and common folds for the principal model comparison. The BIC-selected model is used for prediction; the full model is used for confirmatory inference. This distinction avoids treating a post-selection specification as if it had been pre-specified for hypothesis testing [1,2].
+% =====================================================================
+\section{Statistical Theory and Methods}\label{sec:theory}
+% =====================================================================
+This section explains, in order, each technique used in the project.
 
-\subsection{Diagnostics and secondary methods}
-Residual-versus-fitted, Q--Q, scale-location, Cook's distance, leverage, and DFBETA diagnostics were examined. Breusch--Pagan and White squares-only tests assess heteroscedasticity; a Box--Cox analysis assesses response transformation. WLS and regularised models are sensitivity analyses. Survival duration is last season minus first season plus one; on-field firing is the event, while off-field firing is censored. Kaplan--Meier curves and a Cox model assess tenure [3,4]. A logistic model examines a four-season retention indicator, but its outcome coding does not distinguish insufficient follow-up and is therefore secondary only. Bootstrap and jackknife calculations assess uncertainty in the prior-win coefficient [5].
+\subsection{Multiple linear regression (OLS)}
+For $n$ coaches and $p$ coefficients (including the intercept) the model is
+\[
+y = X\beta + \varepsilon,\qquad \varepsilon \sim (0,\sigma^2 I_n),
+\]
+where $y$ is \var{sp_rel_team} and $X$ is the $n\times p$ design matrix. The ordinary least squares (OLS) estimator minimises the residual sum of squares and equals
+\[
+\hat\beta = (X^\top X)^{-1}X^\top y,\qquad \Var(\hat\beta)=\sigma^2 (X^\top X)^{-1}.
+\]
+To test $H_0:\beta_j=0$ we use $t_j = \hat\beta_j / \operatorname{se}(\hat\beta_j)$ with $n-p$ degrees of freedom. The \emph{partial correlation} of a predictor with the response, given the others, is recovered from its $t$ value by
+\[
+r_{j} = \frac{t_j}{\sqrt{t_j^2 + (n-p)}}.
+\]
+Goodness of fit is summarised by $R^2 = 1-\mathrm{RSS}/\mathrm{SST}$ and by adjusted $R^2$, which penalises the number of predictors.
 
-\section{Descriptive Results and Regression Diagnostics}
-The regression sample has mean CPI approximately -1.96 and standard deviation 8.44; mean prior career HC win percentage is 0.637 (SD 0.167), mean previous-job win percentage is 0.579 (SD 0.119), and mean prior programme SP+ is 7.83 (SD 8.91). These are descriptive summaries. Programme resources, schedule, conference context, institutional investment, and time can affect both hire characteristics and outcomes.
+\subsection{Regression diagnostics}
+Inference from OLS requires linearity, constant error variance, independent errors and (for small samples) normal errors. We check each.
 
-\begin{figure}[H]\centering\includegraphics[width=0.76\linewidth]{fig1_cpi_by_hire_type.png}
-\caption{Observed CPI distribution by hire type. Differences are descriptive, not adjusted causal effects.}\end{figure}
+\paragraph{Residual plots.} Residuals against fitted values reveal non-linearity. The normal Q--Q plot assesses normality. The scale--location plot shows whether the spread of residuals changes with the fitted value.
 
-\subsection{Residual and variance diagnostics}
-\begin{figure}[H]\centering\includegraphics[width=0.82\linewidth]{fig3_residual_panel.png}
-\caption{Confirmatory OLS diagnostics: residuals versus fitted values, normal Q--Q plot, scale-location, and Cook's distance.}\end{figure}
+\paragraph{Leverage and influence.} The hat value $h_{ii}$ measures how unusual the predictors of observation $i$ are. Cook's distance measures how much all fitted values change when $i$ is removed:
+\[
+D_i = \frac{e_i^2}{p\,\hat\sigma^2}\cdot\frac{h_{ii}}{(1-h_{ii})^2}.
+\]
+DFBETAS measures the change in each coefficient. We flag points using the usual rules of thumb: $D_i > 4/n$, $h_{ii}>2p/n$ and $|\mathrm{DFBETAS}|>2/\sqrt n$.
 
-The archived tests show no strong evidence of heteroscedasticity: Breusch--Pagan \(\chi^2=15.76\), 15 df, \(p=0.398\); White squares-only \(\chi^2=22.56\), 30 df, \(p=0.833\). Box--Cox gives \(\hat\lambda=0.909\), with a 95\% interval including 1, so the original response scale is retained. Durbin--Watson is 2.132 (\(p=0.736\)); because observations are cross-sectional hires rather than a naturally ordered time series, this test is descriptive and does not establish independence.
+\paragraph{Breusch--Pagan test.} The squared residuals are regressed on the predictors. Under homoscedasticity the test statistic $nR^2_{\text{aux}}$ is approximately $\chi^2$ with degrees of freedom equal to the number of predictors.
 
-Influence flags are not negligible: 8 observations exceed Cook's-distance rule \(4/n\), 3 exceed leverage rule \(2p/n\), and 33 exceed the stored DFBETA threshold. No observation was deleted solely on these flags. Maximum Cook's distance is 0.112. The largest VIF is 5.55 for \verb|PreviousDC|; VIFs for \verb|AllPriorWinPct| and \verb|PreviousWinPct| are 4.11 and 3.59. No VIF exceeds 10, but the overlapping prior-win variables and their opposite coefficient signs make the net H1 contrast more interpretable than either partial coefficient alone.
+\paragraph{White's test.} A more general version that also includes squared predictors in the auxiliary regression. Because the sample is small we use squares only and omit cross-products, to avoid using up all the degrees of freedom. The statistic is $nR^2_{\text{aux}}\sim\chi^2_{q}$ with $q$ the number of auxiliary regressors.
 
-\section{Model Comparison and Primary Findings}
-\subsection{Predictive model comparison}
-\begin{table}[H]\centering\small
-\caption{Model comparison on the 84-observation regression sample}
-\begin{tabular}{@{}lrrrrrr@{}}\toprule
-Model & Parameters & \(R^2\) & Adj. \(R^2\) & AIC & BIC & CV \(R^2\)\\\midrule
-Null & 1 & 0.000 & 0.000 & 599.62 & 604.49 & -0.056\\
-PreviousOC only & 2 & 0.100 & 0.089 & 592.73 & 600.03 & 0.047\\
-BIC-selected & 3 & 0.154 & 0.133 & 589.55 & 599.27 & 0.071\\
-Confirmatory full & 16 & 0.247 & 0.081 & 605.77 & 647.09 & -0.159\\\bottomrule\end{tabular}
-\tabnote{Ten-fold folds use seed 2026. Cross-validated performance is the relevant predictive comparison; high in-sample fit does not establish generalisation.}\end{table}
+\paragraph{Autocorrelation.} Coaches are ordered in time, so errors might be correlated. The Durbin--Watson statistic is
+\[
+DW=\frac{\sum_{t=2}^n (e_t-e_{t-1})^2}{\sum_{t=1}^n e_t^2},
+\]
+which is near 2 when there is no first-order autocorrelation. We also inspect the ACF/PACF and run a runs test.
 
-The BIC-selected specification is \(\widehat{\mathrm{CPI}}=-1.438+8.516\,\mathrm{PreviousOC}-0.223\,\mathrm{team\_sp\_recent}\). The PreviousOC coefficient is positive (SE 2.482; 95\% CI [3.578, 13.454]; nominal \(p=0.001\)); recent-team SP+ is negative (SE 0.098; 95\% CI [-0.418, -0.028]; nominal \(p=0.026\)). These are post-selection estimates and should be considered exploratory. The negative context coefficient is compatible with regression-to-the-mean patterns but is not a causal effect.
+\subsection{Remedies for assumption violations}
+\paragraph{Box--Cox transformation.} The Box--Cox family transforms a positive response by
+\[
+y^{(\lambda)}=\begin{cases}\dfrac{y^\lambda-1}{\lambda}, & \lambda\neq0,\\[4pt] \ln y, & \lambda=0,\end{cases}
+\]
+and chooses $\lambda$ by maximum likelihood. Since \var{sp_rel_team} takes negative values, we shift it by a constant to make it positive before estimating $\lambda$. A value of $\lambda$ near 1 indicates that no transformation is needed.
 
-\begin{figure}[H]\centering\includegraphics[width=0.72\linewidth]{fig5_model_selection_profile.png}
-\caption{Model-selection profile. BIC favours a compact specification over the 16-parameter confirmatory model.}\end{figure}
+\paragraph{Weighted least squares (WLS).} If $\Var(\varepsilon_i)=\sigma_i^2$ varies across observations, the efficient estimator minimises $\sum_i w_i e_i^2$ with $w_i\propto 1/\sigma_i^2$:
+\[
+\hat\beta_{\text{WLS}}=(X^\top W X)^{-1}X^\top W y .
+\]
+We estimate $\sigma_i^2$ by regressing the squared OLS residuals on \var{team_sp_recent} and \var{AllPriorWinPct}, and set $w_i = 1/\hat\sigma_i^2$.
 
-Ridge and PCR improve on the full OLS cross-validation RMSE in the archived sensitivity run: ridge (lambda-min) RMSE 8.329 and PCR with nine components RMSE 8.416, versus full OLS RMSE 9.027. LASSO/elastic-net outputs also concentrate selection on PreviousOC and recent programme SP+ at selected penalty levels, but selected terms vary with tuning. Four-block F tests do not show any predictor block surviving Holm adjustment; the coordinator-background block has raw \(p=0.106\), adjusted \(p=0.422\). These checks favour parsimony but do not establish a stable predictive model.
+\subsection{Multicollinearity}
+When predictors are strongly correlated, $(X^\top X)$ is nearly singular and coefficient variances are inflated. Here \var{AllPriorWinPct} and \var{PreviousWinPct} are the obvious candidates, since for many coaches they are nearly the same quantity.
 
-\subsection{Confirmatory tests of H1--H4}
-\begin{table}[H]\centering\small
-\caption{Confirmatory H1--H4 coefficient tests from the full model}
-\begin{tabular}{@{}llrrrrl@{}}\toprule
-Hypothesis & Term & Estimate & SE & Raw \(p\) & Holm \(p\) & Verdict\\\midrule
-H1 & AllPriorWinPct & 7.720 & 12.332 & 0.533 & 1.000 & Not supported\\
-H2 & ConnectionToHiring.School & -0.425 & 2.409 & 0.860 & 1.000 & Not supported\\
-H3 & PreviousOC & 7.966 & 3.853 & 0.043 & 0.170 & Not after correction\\
-H4 & PlayedNFL & -3.947 & 3.197 & 0.221 & 0.664 & Not supported\\\bottomrule\end{tabular}
-\tabnote{Holm step-down correction across four stated tests. Bonferroni-adjusted p-values are included in the archived table. No hypothesis survives multiplicity adjustment at 5\% [7].}\end{table}
+\paragraph{Variance inflation factor.}
+\[
+\mathrm{VIF}_j=\frac{1}{1-R_j^2},
+\]
+where $R_j^2$ comes from regressing predictor $j$ on all other predictors. Values above 5 are moderate and above 10 are severe. For factors with several levels we use the generalised VIF.
 
-H3 is the only nominally significant coefficient before correction. Its positive estimate is compatible with the hypothesised direction, but its Holm-adjusted p-value is 0.170 and it is not confirmatory evidence. H1 is parameterisation-sensitive: the two prior-win coefficients are +7.720 and -13.489, giving net estimate -5.769. The net-effect test gives \(F(1,68)=0.215\), \(p=0.644\), and 95\% CI [-30.578, 19.040]. A restricted model dropping \verb|PreviousWinPct| gives an \verb|AllPriorWinPct| estimate of 1.060 (SE 10.175; \(p=0.917\)). Neither supports H1. The full-model overall F test is not significant (\(F=1.489\), 15 and 68 df, \(p=0.134\)).
+\paragraph{Condition number.} For the column-scaled design matrix, $\kappa=\sqrt{\lambda_{\max}/\lambda_{\min}}$ of $X^\top X$. Large values (conventionally above 30) indicate near-linear dependence.
 
-\begin{table}[H]\centering\small
-\caption{BIC-selected model coefficients}
-\begin{tabular}{@{}lrrrr@{}}\toprule
-Term & Estimate & SE & 95\% CI & Raw \(p\)\\\midrule
-Intercept & -1.438 & 1.166 & [-3.757, 0.882] & 0.221\\
-PreviousOC & 8.516 & 2.482 & [3.578, 13.454] & 0.001\\
-team\_sp\_recent & -0.223 & 0.098 & [-0.418, -0.028] & 0.026\\\bottomrule\end{tabular}
-\tabnote{Selected on the full 84-row regression sample. In holdout evaluation, the BIC selection is repeated using the 75-row training set only.}\end{table}
+\paragraph{Remedies.}
+\begin{itemize}
+  \item \emph{Iterative VIF pruning:} repeatedly drop the main effect with the largest VIF until all are below 5.
+  \item \emph{Ridge regression:} adds an $L_2$ penalty,
+  \[
+  \hat\beta_{\text{ridge}}=\arg\min_\beta \|y-X\beta\|^2+\lambda\|\beta\|_2^2=(X^\top X+\lambda I)^{-1}X^\top y,
+  \]
+  which shrinks coefficients and stabilises them under collinearity.
+  \item \emph{Principal-components regression (PCR):} regress $y$ on the first $k$ principal components of the standardised predictors, with $k$ chosen by cross-validation.
+\end{itemize}
+We compare OLS, ridge and PCR by 10-fold cross-validated RMSE.
 
-\section{Survival, Mixed-Effects, and Retention Analyses}
-\subsection{Tenure and firing}
-The survival frame contains 120 completed hires and 39 on-field firing events. Tenure is calculated as last season minus first season plus one; off-field firings are censored rather than treated as on-field-performance events. Kaplan--Meier curves by prior HC experience are similar, and the log-rank test is not significant (\(\chi^2=1.571\), \(p=0.210\)).
+\subsection{Model building and testing groups of variables}
+\paragraph{Block $F$-tests.} To test whether a group of $q$ predictors matters jointly we compare a full and reduced model:
+\[
+F=\frac{(\mathrm{RSS}_{\text{red}}-\mathrm{RSS}_{\text{full}})/q}{\mathrm{RSS}_{\text{full}}/(n-p)}\sim F_{q,\,n-p}.
+\]
+We form four blocks: prior head-coach record, coordinator background, ties and pedigree, and hiring context.
 
-\begin{figure}[H]\centering\includegraphics[width=0.69\linewidth]{fig2_km_curves.png}
-\caption{Kaplan--Meier tenure curves by prior head-coaching experience.}\end{figure}
+\paragraph{Curvature and interaction checks.} For each continuous predictor we add a centred squared term and test it with an $F$-test. Added-variable and component-plus-residual plots show the partial relationship of each predictor with the response. Multiple $p$-values are adjusted with the Holm method.
 
-The Cox model estimates HR 1.752 for prior win percentage (95\% CI [0.189, 16.259], \(p=0.622\)), HR 1.217 for prior HC experience (95\% CI [0.535, 2.768], \(p=0.640\)), and HR 1.032 per year for age at hire (95\% CI [0.981, 1.086], \(p=0.223\)). All intervals include 1; the global proportional-hazards test has \(p=0.139\). Excluding the three externally flagged coaches leaves 117 hires and 37 events; log-rank \(p=0.226\), with prior-win and prior-HC hazard ratios 1.718 and 1.183. With only 39 events, these results are underpowered and inconclusive rather than evidence of no association.
+\subsection{Variable selection and model comparison}
+\paragraph{Information criteria.} For a model with $p$ parameters,
+\[
+\mathrm{AIC}=-2\ell+2p,\qquad \mathrm{BIC}=-2\ell+p\ln n,
+\]
+where $\ell$ is the maximised log-likelihood. BIC penalises complexity more heavily and so selects smaller models. Mallows' $C_p=\mathrm{RSS}_p/\hat\sigma^2_{\text{full}}-(n-2p)$ should be close to $p$ for a good model, and $\mathrm{FPE}=\frac{\mathrm{RSS}}{n}\cdot\frac{n+p}{n-p}$ estimates prediction error.
 
-\subsection{School and conference random effects}
-The archived mixed-effects outputs are not fully reconciled. \verb|w5_mixed_summary.csv| reports school ICC 0.041 and LRT \(p=0.893\), while the later ML-only correction in \verb|lrt_school_random.csv| reports a boundary statistic of zero, \(p=0.500\), and ICC 0.000. The earlier \verb|09_mixed_effects.R| compares a GLS model fit by ML with an LME model fit by REML, so the likelihoods are not a clean basis for an LRT comparison; the later \verb|19_lrt_fix.R| uses ML for both fits with a boundary correction [6]. Because the saved ICC summaries still disagree, this report does not claim school-level heterogeneity is exactly zero. The defensible conclusion is that the archived outputs provide no reliable evidence of a material school random intercept; the fixed-effects model remains primary pending a clean rerun and reconciliation.
+\paragraph{Search strategies.} We use exhaustive best-subsets search (adjusted $R^2$, $C_p$, BIC) and bidirectional stepwise search using AIC and BIC.
 
-\subsection{Logistic retention analysis}
-The secondary logistic model defines \verb|Retained4| as at least four completed seasons without an off-field firing. Odds-ratio intervals are very wide (AllPriorWinPct OR 9.659, 95\% CI [0.127, 732.056]; PreviousOC OR 0.770, 95\% CI [0.179, 3.304]); no displayed predictor interval excludes 1. The Hosmer--Lemeshow test has \(p=0.433\), but a non-significant calibration test does not establish discrimination. More importantly, the coding classifies not-yet-observable four-season cases as non-retained, conflating censoring with failure. These results are descriptive only and do not modify H1--H4.
+\paragraph{Out-of-sample criteria.} The PRESS statistic is the leave-one-out prediction error,
+\[
+\mathrm{PRESS}=\sum_{i=1}^n\left(\frac{e_i}{1-h_{ii}}\right)^2,\qquad R^2_{\text{pred}}=1-\frac{\mathrm{PRESS}}{\mathrm{SST}}.
+\]
+We also use 10-fold cross-validation, reporting $\mathrm{CV\;RMSE}$ and $\mathrm{CV}\;R^2$.
 
-\section{Resampling, Temporal Validation, and Decision Score}
-\subsection{Bootstrap and jackknife}
-The 1,000-resample bootstrap interval for the AllPriorWinPct coefficient is [-19.86, 34.22], including zero. Jackknife bias is 0.34, small relative to the reported standard error of approximately 13.3. The resampling checks confirm that the prior-win association is imprecise; they do not resolve confounding or collinearity.
+\paragraph{LASSO and elastic net.} The LASSO uses an $L_1$ penalty,
+\[
+\hat\beta_{\text{lasso}}=\arg\min_\beta \tfrac{1}{2n}\|y-X\beta\|^2+\lambda\|\beta\|_1,
+\]
+which sets some coefficients exactly to zero and therefore performs selection. The elastic net mixes $L_1$ and $L_2$ penalties. We report the $\lambda$ with minimum CV error (\var{lambda.min}) and the sparser $\lambda$ within one standard error of it (\var{lambda.1se}).
 
-\subsection{2022+ holdout}
-The holdout script defines the test set as all observed-CPI hires beginning in 2022 or later, without filtering on current employment status. Training is the regression sample after removing holdout identities (75 observations). Both models are refitted on training data only. The BIC model gives 95\% prediction-interval coverage 0.952 (40/42; exact 95\% CI [0.838, 0.994]), RMSE 9.004 and MAE 6.934. The train-only confirmatory model gives the same coverage, RMSE 9.159 and MAE 7.103.
+\paragraph{Bootstrap selection stability and optimism.} Selecting a model and then judging it on the same data is over-optimistic. We draw $B=300$ bootstrap samples, rerun BIC stepwise selection on each, and record (i) the proportion of samples in which each term is selected and (ii) the optimism, i.e.\ the average difference between the RMSE on the original data and the RMSE on the bootstrap sample. Terms selected in most resamples are considered stable.
 
-\begin{figure}[H]\centering\includegraphics[width=0.72\linewidth]{fig7_pi_coverage.png}
-\caption{Observed CPI and 95\% prediction intervals for the 2022+ holdout under the train-only BIC model.}\end{figure}
+\paragraph{Final models.} We carry two models forward: the \textbf{BIC-selected} model (parsimonious) and the \textbf{confirmatory} full model (all pre-specified terms retained, so hypotheses about \var{AllPriorWinPct} can be tested directly).
 
-This is \textbf{post hoc temporal validation}, not a pre-registered prospective test. The original nine-row subset used a \verb|StillEmployedAtSchool = 0| condition, consisted only of fired/departed coaches, and overlapped the training sample. Its coverage (0.889; exact interval [0.518, 0.997]) is retained in the archive for traceability but is not the primary validation. The 42-row cohort corrects the status filter and removes overlap, but the decision to replace the initial subset was made after its result was observed; this limits confirmatory claims.
+\subsection{Clustering: random-intercept mixed models}
+Several coaches were hired by the same school, so their outcomes may be correlated. The random-intercept model is
+\[
+y_{ij}=x_{ij}^\top\beta+u_j+\varepsilon_{ij},\quad u_j\sim N(0,\sigma_u^2),\ \varepsilon_{ij}\sim N(0,\sigma^2),
+\]
+for coach $i$ in school $j$. The intraclass correlation
+\[
+\mathrm{ICC}=\frac{\sigma_u^2}{\sigma_u^2+\sigma^2}
+\]
+is the share of residual variance attributable to the school. To test $H_0:\sigma_u^2=0$ we compare the mixed model with the ordinary linear model (both fitted by maximum likelihood) using the likelihood-ratio statistic $2(\ell_{\text{lme}}-\ell_{\text{gls}})$. Because the null value lies on the boundary of the parameter space, the null distribution is a 50:50 mixture of $\chi^2_0$ and $\chi^2_1$, so the correct $p$-value is half the naive $\chi^2_1$ value. If the optimiser returns a slightly negative statistic, it is floored at zero. Predicted school effects are the best linear unbiased predictors (BLUPs).
 
-The separate \verb|decision_rule_validation.csv| reports Spearman \(\rho=0.189\), RMSE 8.952, and training-mean baseline RMSE 8.874; it records zero cases achieving a 10\% improvement over the baseline. The RMSE of 8.952 differs slightly from 9.004 in \verb|holdout_performance.csv|. This discrepancy is unresolved in the supplied outputs. Both show that prediction is weak and does not beat the simple baseline. For the win-percentage-differential outcome, holdout coverage is 0.881 and RMSE 0.192; this RMSE is on a different scale and is not comparable to CPI RMSE.
+\subsection{Simultaneous inference}
+Looking at $m$ coefficients at once inflates the family-wise error rate. With individual level $\alpha$ the confidence intervals are $\hat\beta_j\pm c\,\operatorname{se}(\hat\beta_j)$ where
+\[
+c_{\text{pointwise}}=t_{n-p,\,1-\alpha/2},\quad
+c_{\text{Bonf}}=t_{n-p,\,1-\alpha/(2m)},\quad
+c_{\text{Scheff\'e}}=\sqrt{m\,F_{m,\,n-p,\,1-\alpha}}.
+\]
+Bonferroni is simple and valid for a finite number of intervals; Scheff\'e is valid for \emph{all} linear combinations and therefore widest. For the mean response over many covariate patterns the Working--Hotelling band uses the same multiplier as Scheff\'e. We also adjust $p$-values using Holm (controls family-wise error) and Benjamini--Hochberg (controls false-discovery rate), and compare mean outcomes across conferences with Tukey's HSD and Holm-adjusted pairwise $t$-tests.
 
-\subsection{Coach Hire Score}
-The score maps a model fitted value to its percentile within the training fitted-value distribution; it is not a probability of success. In the worked examples, BIC-model percentile scores are 45.2 for an established head coach, 96.4 for an experienced OC, and 97.6 for a first-time HC profile. Their BIC prediction intervals are approximately 31--33 CPI points wide and overlap substantially. The ranking is heavily influenced by prior OC status and programme context. A percentile of 96.4 does not mean a 96.4\% chance of success. Given the holdout rank correlation of 0.189 and RMSE worse than the mean baseline, the score is an exploratory discussion aid, not an operational screening or hiring rule.
+\subsection{Logistic regression for retention}
+For the binary outcome $Y_i=\texttt{Retained4}$ we model
+\[
+\ln\frac{\Pr(Y_i=1)}{1-\Pr(Y_i=1)}=x_i^\top\beta,
+\]
+estimated by maximum likelihood. Then $e^{\beta_j}$ is the odds ratio for a one-unit increase in $x_j$. We use:
+\begin{itemize}
+  \item \textbf{Likelihood-ratio tests} for the whole model and for each term (\var{drop1}).
+  \item \textbf{Pseudo-$R^2$:} McFadden $1-\ell_1/\ell_0$ and Nagelkerke (a rescaled Cox--Snell measure).
+  \item \textbf{Hosmer--Lemeshow test:} groups observations by fitted probability (deciles) and compares observed with expected events; a large $p$-value indicates adequate fit.
+  \item \textbf{ROC and AUC:} the area under the curve of true-positive rate against false-positive rate, i.e.\ the probability that a random retained coach receives a higher score than a random non-retained coach. The Youden threshold maximises $\mathrm{TPR}-\mathrm{FPR}$.
+  \item \textbf{Cross-validation:} 10-fold misclassification rate and AUC, compared with the majority-class baseline.
+  \item \textbf{Calibration and diagnostics:} observed versus predicted rate by decile, deviance residuals and Cook's distance.
+  \item \textbf{Selection and penalisation:} BIC stepwise and LASSO logistic regression, which also guard against (quasi-)separation.
+\end{itemize}
 
-\section{Discussion and Limitations}
-The main finding is the gap between in-sample fit and predictive performance. The confirmatory model reaches \(R^2=0.247\), but adjusted \(R^2=0.081\) and cross-validated \(R^2=-0.159\) indicate poor generalisation. The BIC model is more economical and performs better under cross-validation, but CV \(R^2=0.071\) is modest and the post hoc holdout does not demonstrate improvement over a training-mean benchmark. H3 is a plausible exploratory association, not a confirmed result after multiplicity adjustment.
+\subsection{Resampling: jackknife and bootstrap}
+\paragraph{Jackknife.} Leave out one observation at a time to obtain $\hat\theta_{(i)}$ and compute
+\[
+\widehat{\mathrm{bias}}=(n-1)(\bar\theta_{(\cdot)}-\hat\theta),\qquad
+\widehat{\mathrm{se}}=\sqrt{\tfrac{n-1}{n}\sum_i(\hat\theta_{(i)}-\bar\theta_{(\cdot)})^2}.
+\]
+\paragraph{Bootstrap.} Resample coaches with replacement $R=1000$ times, refit the model and collect $\hat\theta^*$. The percentile interval uses the 2.5\% and 97.5\% quantiles of $\hat\theta^*$. We apply both to the coefficient of \var{AllPriorWinPct} and compare with the usual $t$-interval, to check whether the classical inference is trustworthy for a small, possibly non-normal sample.
 
-Material limitations are:
+\subsection{Survival analysis for tenure}
+Let $T$ be the tenure in seasons. Coaches still employed, or who left for off-field reasons, are \emph{right-censored}; the event is a performance-related firing. The \textbf{Kaplan--Meier estimator}
+\[
+\hat S(t)=\prod_{t_i\le t}\left(1-\frac{d_i}{n_i}\right)
+\]
+(with $d_i$ events and $n_i$ at risk at time $t_i$) estimates the survival curve, and the \textbf{log-rank test} compares curves between groups (prior head coach versus none). The \textbf{Cox proportional-hazards model}
+\[
+h(t\mid x)=h_0(t)\exp(x^\top\beta)
+\]
+gives hazard ratios $e^{\beta_j}$. Its key assumption, that hazard ratios are constant over time, is checked with the Schoenfeld-residual test (\var{cox.zph}).
+
+\subsection{Prospective holdout validation}
+The strongest check uses hires from 2022 onward as a test set. These rows are removed from the training data, both the BIC and the full model are refitted on the training data only, and 95\% prediction intervals are computed for the holdout coaches. The \emph{coverage} is the share of true outcomes inside the intervals,
+\[
+\widehat{\mathrm{cov}}=\frac{1}{n_{\text{test}}}\sum_{i}\mathbf 1\{y_i\in[\hat y_i^{\text{lwr}},\hat y_i^{\text{upr}}]\},
+\]
+which should be near 95\% if the model is well calibrated. We give an exact binomial confidence interval for coverage, and the RMSE and MAE of the point predictions. The training-set imputation rules (means and modes) are applied to the holdout to avoid information leakage.
+
+% =====================================================================
+\section{Results}\label{sec:results}
+% =====================================================================
+All numbers in red are placeholders to be filled from the output tables.
+
+\subsection{Baseline model}
+The full OLS model was fitted on $n=\ph{120}$ coaches, with $R^2=\ph{0.247}$ and adjusted $R^2=\ph{0.081}$. Table~\ref{tab:baseline} shows the coefficients.
+
+\begin{table}[H]
+\centering
+\caption{Full OLS model (\var{baseline_coefficients.csv}).}\label{tab:baseline}
+\small
+\begin{tabular}{@{}lrrrrr@{}}
+\toprule
+\textbf{Term} & \textbf{Estimate} & \textbf{Std.\ error} & \textbf{$t$} & \textbf{$p$} \\
+\midrule
+\var{(Intercept)} & \ph{0.58} & \ph{8.45} & \ph{0.07} & \ph{0.95} \\
+\var{PrevHCAnyLevel} & \ph{-1.05} & \ph{3.93} & \ph{-0.27} & \ph{0.79}  \\
+\var{AllPriorWinPct} & \ph{7.72} & \ph{12.33} & \ph{0.63} & \ph{0.53}  \\
+\var{PreviousWinPct} & \ph{-13.49} & \ph{14.09} & \ph{-0.96} & \ph{0.34}  \\
+\var{PreviousOC} & \ph{7.97} & \ph{3.85} & \ph{2.07} & \ph{0.04} \\
+\var{PreviousDC} & \ph{0.19} & \ph{4.60} & \ph{0.04} & \ph{0.97} \\
+\var{SideOfBallO} & \ph{-0.51} & \ph{3.15} & \ph{-0.16} & \ph{0.87}  \\
+\var{ConnectionToHiringSchool} & \ph{-0.43} & \ph{2.41} & \ph{-0.18} & \ph{0.86} \\
+\var{PlayedNFL} & \ph{-3.95} & \ph{3.20} & \ph{-1.23} & \ph{0.22} \\
+\var{AgeAtHiringMinus50} & \ph{-0.15} & \ph{0.17} & \ph{-0.88} & \ph{0.38}  \\
+\var{NFLCoachingExperience} & \ph{0.80} & \ph{2.24} & \ph{0.35} & \ph{0.72}  \\
+\var{WonCCasHCany} & \ph{4.51} & \ph{2.96} & \ph{1.52} & \ph{0.13} \\
+\var{Conf.LeavingP4} & \ph{-0.30} & \ph{2.49} & \ph{-0.12} & \ph{0.90} \\
+\var{team\_sp\_recent} & \ph{-0.27} & \ph{0.12} & \ph{-2.28} & \ph{0.03} \\
+\var{PromoteWithin} & \ph{3.02} & \ph{3.67} & \ph{0.82} & \ph{0.41}  \\
+\var{PrevHCAnyLevel:sp\_prev\_rel} & \ph{0.08} & \ph{0.17} & \ph{0.48} & \ph{0.63}\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Diagnostics}
+
+\begin{table}[H]
+\centering
+\caption{Assumption tests (\var{heteroscedasticity_tests.csv}, \var{autocorrelation_test.csv}).}\label{tab:tests}
+\begin{tabular}{@{}lrrr@{}}
+\toprule
+\textbf{Test} & \textbf{Statistic} & \textbf{df} & \textbf{$p$-value}\\
+\midrule
+Breusch--Pagan & \ph{15.756} & \ph{15} & \ph{0.398}\\
+White (squares only) & \ph{22.56} & \ph{30} & \ph{0.833}\\
+Durbin--Watson & \ph{2.132} & -- & \ph{0.736}\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+
+\textbf{Influence.} \ph{8} coaches exceeded the Cook's distance threshold $4/n$, \ph{4} had high leverage and \ph{5} had large DFBETAS. The most influential coaches were \ph{Hugh Freeze, Luke Fickell, and Brian Kelly}.
+
+\textbf{Interpretation.}
+\newline
+\ph{Breusch-Pagan ($p = 0.398$) and White's test ($p = 0.833$) indicate no significant heteroscedasticity.}
+\newline
+\ph{Durbin-Watson ($DW = 2.132$, $p = 0.736$) indicates no first-order autocorrelation.}
+\newline
+\ph{Residuals appear approximately normal based on the Q-Q plot.}
+
+\subsection{Remedies}
+The Box--Cox profile (Figure~\ref{fig:bc}) gave $\hat\lambda=\ph{0.9}$ with shift constant \ph{21}, so \ph{a transformation was not} needed. Weighted least squares gave the coefficient comparison in Table~\ref{tab:wls}.
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.8\textwidth]{figures/fig3_residual_panel.png}
+    \caption{Residuals vs fitted, normal Q--Q, scale--location and Cook's distance for the full model.}
+    \label{fig:cpi}
+\end{figure}
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.8\textwidth]{figures/fig4_white_aux.png}
+    \caption{Squared residuals against fitted values with a lowess smoother.}
+\end{figure}
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.8\textwidth]{figures/fig3b_acf_pacf.png}
+    \caption{ACF and PACF of the residuals.}
+    \label{fig:cpi}
+\end{figure}
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.8\textwidth]{figures/fig4b_boxcox.png}
+    \caption{Box--Cox log-likelihood profile for the shifted response.}
+    \label{fig:cpi}
+\end{figure}
+
+\begin{table}[H]
+\centering
+\caption{OLS versus WLS coefficients (\var{wls_coefficients.csv}).}\label{tab:wls}
+\begin{tabular}{@{}lrr@{}}
+\toprule
+\textbf{Term} & \textbf{OLS} & \textbf{WLS}\\
+\midrule
+\var{(Intercept)} & 0.58 & -1.50\\
+\var{PrevHCAnyLevel} & -1.05 & -2.28\\
+\var{AllPriorWinPct} & 7.72 & 8.83\\
+\var{PreviousWinPct} & -13.49 & -10.28\\
+\var{PreviousOC} & 7.97 & 7.98\\
+\var{PreviousDC} & 0.19 & 0.58\\
+\var{SideOfBallO} & -0.51 & -0.28\\
+\var{ConnectionToHiring.School} & -0.43 & -0.34\\
+\var{PlayedNFL} & -3.95 & -3.63\\
+\var{AgeAtHiringMinus50} & -0.15 & -0.08\\
+\var{NFLCoachingExperience} & 0.80 & 1.91\\
+\var{WonCCasHCany} & 4.51 & 4.08\\
+\var{Conf.LeavingP4} & -0.30 & -0.23\\
+\var{team_sp_recent} & -0.27 & -0.24\\
+\var{PromoteWithin} & 3.02 & 2.53\\
+\var{PrevHCAnyLevel:sp_prev_rel} & 0.08 & 0.09\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Multicollinearity}
+The largest variance inflation factors are in Table~\ref{tab:vif}. The condition number of the scaled design matrix is \ph{6.7}.
+
+\begin{table}[H]
+\centering
+\caption{Variance inflation factors (\var{w4_vif_columns.csv}).}\label{tab:vif}
+\begin{tabular}{@{}lrl@{}}
+\toprule
+\textbf{Term} & \textbf{VIF} & \textbf{Flag}\\
+\midrule
+\var{PreviousDC} & \ph{5.55} & \ph{moderate ($>5$)} \\
+\var{PrevHCAnyLevel} & \ph{4.68} & \ph{} \\
+\var{AllPriorWinPct} & \ph{4.11} & \ph{} \\
+\var{PreviousWinPct} & \ph{3.59} & \ph{} \\
+\var{SideOfBallO} & \ph{3.07} & \ph{} \\
+\var{WonCCasHCany} & \ph{2.69} & \ph{} \\
+\var{PromoteWithin} & \ph{2.54} & \ph{} \\
+\var{PreviousOC} & \ph{2.34} & \ph{} \\
+\var{PrevHCAnyLevel:sp\_prev\_rel} & \ph{1.85} & \ph{} \\
+\var{Conf.LeavingP4} & \ph{1.83} & \ph{} \\
+\var{AgeAtHiringMinus50} & \ph{1.73} & \ph{} \\
+\var{ConnectionToHiringSchool} & \ph{1.71} & \ph{} \\
+\var{team\_sp\_recent} & \ph{1.38} & \ph{} \\
+\var{PlayedNFL} & \ph{1.26} & \ph{} \\
+\var{NFLCoachingExperience} & \ph{1.25} & \ph{} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.8\textwidth]{figures/w4_corr_heatmap.png}
+    \caption{Correlation matrix of the numeric predictors.}
+    \label{fig:cpi}
+\end{figure}
+
+Terms dropped by VIF pruning: \ph{Previous DC}. The $F$-test of the pruned model against the full model gave $p=\ph{0.97}$. Table~\ref{tab:cvcomp} compares OLS, ridge and PCR.
+
+\begin{table}[H]
+\centering
+\caption{10-fold CV RMSE of OLS, ridge and PCR (\var{w4_cv_comparison.csv}).}\label{tab:cvcomp}
+\begin{tabular}{@{}lr@{}}
+\toprule
+\textbf{Method} & \textbf{CV RMSE}\\
+\midrule
+OLS (full) & \ph{9.027}\\
+Ridge ($\lambda_{\min}$) & \ph{8.329}\\
+PCR ($k=\ph{9}$) & \ph{8.416}\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.8\textwidth]{figures/w4_ridge_trace.png}
+    \caption{Ridge coefficient paths and cross-validation curve.}
+    \label{fig:cpi}
+\end{figure}
+
+\subsection{Block tests and curvature}
+
+
+\begin{table}[H]
+\centering
+\caption{Block $F$-tests (\var{w4_block_F_tests.csv}).}\label{tab:blocks}
+\begin{tabular}{@{}lrrrr@{}}
+\toprule
+\textbf{Block} & \textbf{$F$} & \textbf{df} & \textbf{$p$} & \textbf{Holm $p$}\\
+\midrule
+Prior head-coach record & \ph{0.93} & \ph{(5, 68)} & \ph{0.47} & \ph{0.93}\\
+Coordinator background & \ph{2.12} & \ph{(3, 68)} & \ph{0.11} & \ph{0.42}\\
+Ties and pedigree & \ph{0.48} & \ph{(4, 68)} & \ph{0.75} & \ph{0.93}\\
+Hiring context & \ph{1.80} & \ph{(3, 68)} & \ph{0.16} & \ph{0.47}\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+
+Curvature tests: \ph{None of the squared terms for continuous predictors were statistically significant ($p > 0.05$).}.
+
+\subsection{Model selection}
+Best-subsets search suggested \ph{6} predictors under adjusted $R^2$, \ph{4} under $C_p$ and \ph{2} under BIC. The stepwise formulas were:
+\begin{itemize}
+  \item AIC: \ph{sp_rel_team ~ PreviousOC + team_sp_recent + WonCCasHCany + AgeAtHiringMinus50}
+  \item BIC: \ph{sp_rel_team ~ PreviousOC + team_sp_recent}
+\end{itemize}
+
+\begin{table}[H]
+\centering
+\caption{Candidate model comparison (\var{model_comparison.csv}).}\label{tab:modelcomp}
+\small
+\begin{tabular}{@{}lrrrrrrr@{}}
+\toprule
+\textbf{Model} & \textbf{$p$} & \textbf{$R^2$} & \textbf{Adj.\ $R^2$} & \textbf{AIC} & \textbf{BIC} & \textbf{CV RMSE} & \textbf{CV $R^2$}\\
+\midrule
+Null & \ph{1} & \ph{0.00} & \ph{0.00} & \ph{599.62} & \ph{604.49} & \ph{8.62} & \ph{-0.06}\\
+\var{PreviousOC} only & \ph{2} & \ph{0.10} & \ph{0.09} & \ph{592.73} & \ph{600.03} & \ph{8.19} & \ph{0.05}\\
+BIC-selected & \ph{3} & \ph{0.15} & \ph{0.13} & \ph{589.55} & \ph{599.27} & \ph{8.08} & \ph{0.07}\\
+Confirmatory (full) & \ph{16} & \ph{0.25} & \ph{0.08} & \ph{605.77} & \ph{647.09} & \ph{9.03} & \ph{-0.16}\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.8\textwidth]{figures/fig5_model_selection_profile.png}
+    \caption{Adjusted $R^2$, $C_p$ and BIC against subset size.}
+    \label{fig:cpi}
+\end{figure}
+
+\textbf{LASSO and elastic net.} The LASSO retained \ph{5} at $\lambda_{\min}$ and \ph{0} at $\lambda_{1se}$.
+
+\textbf{Bootstrap stability.} Table~\ref{tab:bootsel} gives the proportion of 300 bootstrap samples in which each term was selected. The optimism-corrected RMSE of the BIC model is \ph{8.35}, against an apparent RMSE of \ph{7.7}.
+
+\begin{table}[H]
+\centering
+\caption{Bootstrap inclusion frequency (\var{w5_bootstrap_selection_freq.csv}).}\label{tab:bootsel}
+\begin{tabular}{@{}lr@{}}
+\toprule
+\textbf{Term} & \textbf{Inclusion frequency}\\
+\midrule
+\var{PreviousOC} & \ph{0.77}\\
+\var{team\_sp\_recent} & \ph{0.48}\\
+\var{WonCCasHCany} & \ph{0.28}\\
+\var{PlayedNFL} & \ph{0.17}\\
+\var{AllPriorWinPct} & \ph{0.13}\\
+\var{AgeAtHiringMinus50} & \ph{0.13}\\
+\var{PrevHCAnyLevel} & \ph{0.11}\\
+\var{PromoteWithin} & \ph{0.10}\\
+\var{PreviousWinPct} & \ph{0.08}\\
+\var{ConnectionToHiringSchool} & \ph{0.08}\\
+\var{NFLCoachingExperience} & \ph{0.06}\\
+\var{Conf.LeavingP4} & \ph{0.05}\\
+\var{SideOfBall} & \ph{0.05}\\
+\var{PreviousDC} & \ph{0.04}\\
+\var{PrevHCAnyLevel:sp\_prev\_rel} & \ph{0.01}\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Hypothesis tests on prior win percentage}
+Because \var{AllPriorWinPct} and \var{PreviousWinPct} overlap, we examine the effect of prior winning in three ways (Table~\ref{tab:h1}): the coefficient in the full model, the coefficient after dropping \var{PreviousWinPct}, and the combined effect $\beta_{\text{AllPrior}}+\beta_{\text{Previous}}$ with variance
+$\Var(\hat\beta_1)+\Var(\hat\beta_2)+2\Cov(\hat\beta_1,\hat\beta_2)$.
+
+\begin{table}[H]
+\centering
+\caption{Sensitivity of the prior-win-percentage effect (\var{h1_sensitivity.csv}).}\label{tab:h1}
+\small
+\begin{tabular}{@{}lrrrrr@{}}
+\toprule
+\textbf{Specification} & \textbf{Estimate} & \textbf{SE} & \textbf{95\% CI} & \textbf{$p$} & \textbf{Holm $p$}\\
+\midrule
+\var{AllPriorWinPct} (full model) & \ph{7.72} & \ph{12.33} & \ph{[-16.89, 32.33]} & \ph{0.53} & \ph{1.00}\\
+\var{AllPriorWinPct} (\var{PreviousWinPct} dropped) & \ph{1.06} & \ph{10.18} & \ph{[-19.24, 21.36]} & \ph{0.92} & \ph{1.00}\\
+Net effect & \ph{-5.77} & \ph{12.43} & \ph{[-30.58, 19.04]} & \ph{0.64} & \ph{1.00}\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Simultaneous inference}
+Multipliers: pointwise $t=\ph{1.990}$, Bonferroni $t=\ph{2.445}$, Scheff\'e $=\ph{2.855}$. Table~\ref{tab:simul} shows how the conclusions change as the intervals become more conservative.
+
+\begin{table}[H]
+\centering
+\caption{Coefficients of the BIC model with adjusted inference (\var{w5_simultaneous_coef_intervals.csv}).}\label{tab:simul}
+\small
+\begin{tabular}{@{}lrrrrr@{}}
+\toprule
+\textbf{Term} & \textbf{Estimate} & \textbf{Pointwise CI} & \textbf{Bonferroni CI} & \textbf{Raw $p$} & \textbf{Holm $p$}\\
+\midrule
+\var{(Intercept)} & \ph{-1.44} & \ph{[-3.76, 0.88]} & \ph{[-4.29, 1.41]} & \ph{0.22} & \ph{0.22}\\
+\var{PreviousOC} & \ph{8.52} & \ph{[3.58, 13.45]} & \ph{[2.45, 14.58]} & \ph{0.001} & \ph{0.003}\\
+\var{team\_sp\_recent} & \ph{-0.22} & \ph{[-0.42, -0.03]} & \ph{[-0.46, 0.02]} & \ph{0.026} & \ph{0.05}\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+After Holm adjustment, \var{PreviousOC} remains significant ($p=0.003$), whereas
+\var{team_sp_recent} is borderline (Holm $p=0.052$) and its Bonferroni interval
+includes zero. Table~\ref{tab:bands} compares the simultaneous bands for the mean
+response over all 84 observed covariate patterns.
+
+\begin{table}[H]
+\centering
+\caption{Bands for the mean response (\var{w5_mean_response_bands.csv}).}\label{tab:bands}
+\begin{tabular}{@{}lrr@{}}
+\toprule
+\textbf{Method} & \textbf{Multiplier} & \textbf{Mean half-width}\\
+\midrule
+Pointwise $t$ & 1.990 & 2.75\\
+Bonferroni ($n$ points) & 3.574 & 4.95\\
+Working--Hotelling & 2.855 & 3.95\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The Working--Hotelling band is narrower than the Bonferroni band, so it is the
+better choice for simultaneous inference on the whole regression surface. \newline
+Conference comparisons (Tukey HSD): \ph{Tukey's HSD test across Power-4 conferences indicated no statistically significant pairwise differences in coaching impact ($p > 0.05$ for all comparisons), confirming that conference membership does not explain variation in coach performance.}.
+
+\subsection{Mixed-effects models}
+For the school random intercept, $\hat\sigma_u^2=\ph{2.521}$, $\hat\sigma^2=\ph{59.187}$ and $\mathrm{ICC}=\ph{0.041}$. The boundary-corrected likelihood-ratio test gave $\chi^2=\ph{0.02}$, $p=\ph{0.45}$. \ph{School-level clustering is negligible confirming that a school random intercept is unnecessary and fixed-effects OLS is valid} Results for conference are in \var{w5_mixed_summary.csv}.
+
+\subsection{Logistic regression for four-year retention}
+Of the \ph{84} coaches, \ph{66.7}\% were retained for four seasons. The global likelihood-ratio test gave $\chi^2=\ph{22.32}$ on \ph{15} df ($p=\ph{0.0997}$). McFadden $R^2=\ph{0.209}$ and Nagelkerke $R^2=\ph{0.324}$. The Hosmer--Lemeshow test gave $p=\ph{0.727}$.
+
+\begin{table}[H]
+\centering
+\caption{Odds ratios (\var{w5_logit_odds_ratios.csv}).}\label{tab:or}
+\begin{tabular}{@{}lrrrr@{}}
+\toprule
+\textbf{Term} & \textbf{OR} & \textbf{Lower} & \textbf{Upper} & \textbf{$p$}\\
+\midrule
+\var{(Intercept)} & \ph{1.20} & \ph{0.01} & \ph{262.71} & \ph{0.95}\\
+\var{PrevHCAnyLevel} & \ph{3.07} & \ph{0.31} & \ph{39.06} & \ph{0.35}\\
+\var{AllPriorWinPct} & \ph{0.15} & \ph{0.00} & \ph{212.33} & \ph{0.62}\\
+\var{PreviousWinPct} & \ph{5.48} & \ph{0.00} & \ph{45237.54} & \ph{0.70}\\
+\var{PreviousOC} & \ph{3.19} & \ph{0.32} & \ph{45.82} & \ph{0.35}\\
+\var{PreviousDC} & \ph{0.70} & \ph{0.03} & \ph{15.14} & \ph{0.82}\\
+\var{SideOfBallO} & \ph{0.08} & \ph{0.00} & \ph{0.75} & \ph{0.05}\\
+\var{ConnectionToHiringSchool} & \ph{7.81} & \ph{1.62} & \ph{53.72} & \ph{0.02}\\
+\var{PlayedNFL} & \ph{0.71} & \ph{0.10} & \ph{5.68} & \ph{0.73}\\
+\var{AgeAtHiringMinus50} & \ph{0.88} & \ph{0.78} & \ph{0.98} & \ph{0.02}\\
+\var{NFLCoachingExperience} & \ph{1.37} & \ph{0.35} & \ph{5.84} & \ph{0.65}\\
+\var{WonCCasHCany} & \ph{8.66} & \ph{1.40} & \ph{72.28} & \ph{0.03}\\
+\var{Conf.LeavingP4} & \ph{0.93} & \ph{0.18} & \ph{4.82} & \ph{0.93}\\
+\var{team_sp_recent} & \ph{0.96} & \ph{0.88} & \ph{1.03} & \ph{0.24}\\
+\var{PromoteWithin} & \ph{0.29} & \ph{0.03} & \ph{2.62} & \ph{0.28}\\
+\var{PrevHCAnyLevel:sp\_prev\_rel} & \ph{1.03} & \ph{0.93} & \ph{1.15} & \ph{0.54}\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[H]
+\centering
+\caption{Discrimination and out-of-sample performance of the logistic model.}\label{tab:logperf}
+\begin{tabular}{@{}lr@{}}
+\toprule
+\textbf{Measure} & \textbf{Value}\\
+\midrule
+Apparent AUC & \ph{0.781}\\
+10-fold CV AUC & \ph{0.548}\\
+10-fold CV misclassification & \ph{0.452}\\
+Majority-class baseline error & \ph{0.333}\\
+Youden threshold & \ph{0.642}\\
+LASSO-logistic CV AUC & \ph{n/a (null model selected)}\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.8\textwidth]{figures/w5_logit_roc.png}
+    \caption{ROC curve of the logistic model.}
+    \label{fig:cpi}
+\end{figure}
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.8\textwidth]{figures/w5_logit_calibration.png}
+    \caption{Calibration of predicted retention probabilities by decile.}
+    \label{fig:cpi}
+\end{figure}
+
+\subsection{Jackknife and bootstrap for \texttt{AllPriorWinPct}}
+
+\begin{table}[H]
+\centering
+\caption{Resampling inference for the \var{AllPriorWinPct} coefficient.}\label{tab:resamp}
+\begin{tabular}{@{}lrr@{}}
+\toprule
+\textbf{Method} & \textbf{Estimate / bias / SE} & \textbf{95\% interval}\\
+\midrule
+OLS ($t$-interval) & \ph{7.720, SE 12.332} & \ph{(-16.888, 32.328)}\\
+Jackknife & bias \ph{0.503}, SE \ph{13.293} & --\\
+Bootstrap normal & \ph{7.720, bias 0.835, SE 13.486} & \ph{(-19.547, 33.316)}\\
+Bootstrap percentile & \ph{7.720 (median 8.043)} & \ph{(-18.334, 34.679)}\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.8\textwidth]{figures/fig6_bootstrap_coef.png}
+    \caption{Bootstrap distribution of the \var{AllPriorWinPct} coefficient.}
+    \label{fig:cpi}
+\end{figure}
+
+\subsection{Survival analysis}
+The survival sample has $n=\ph{120}$ coaches with \ph{39} events and \ph{81} censored observations. The log-rank test comparing coaches with and without prior head-coaching experience gave $\chi^2=\ph{1.6}$, $p=\ph{0.21}$.
+
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.8\textwidth]{figures/fig2_km_curves.png}
+    \caption{Kaplan--Meier curves of tenure by prior head-coaching experience.}
+    \label{fig:cpi}
+\end{figure}
+
+\begin{table}[H]
+\centering
+\caption{Cox proportional-hazards model (\var{cox_coefficients.csv}).}\label{tab:cox}
+\begin{tabular}{@{}lrrr@{}}
+\toprule
+\textbf{Term} & \textbf{Hazard ratio} & \textbf{95\% CI} & \textbf{$p$}\\
+\midrule
+\var{AllPriorWinPct} & \ph{1.75} & \ph{[0.19, 16.26]} & \ph{0.62}\\
+\var{PrevHCAnyLevel} & \ph{1.22} & \ph{[0.53, 2.77]} & \ph{0.64}\\
+\var{AgeAtHiringMinus50} & \ph{1.03} & \ph{[0.98, 1.09]} & \ph{0.22}\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+
+The proportional-hazards assumption test gave global $p=\ph{0.139}$. The sensitivity analysis excluding the three flagged coaches (Table~\ref{tab:survsens}) \ph{did not} change the conclusions.
+
+\begin{table}[H]
+\centering
+\caption{Survival sensitivity analysis (\var{survival_sensitivity.csv}).}\label{tab:survsens}
+\small
+\begin{tabular}{@{}lrrrrr@{}}
+\toprule
+\textbf{Version} & \textbf{$n$} & \textbf{Events} & \textbf{Log-rank $p$} & \textbf{HR (AllPrior)} & \textbf{HR (PrevHC)}\\
+\midrule
+Primary & \ph{120} & \ph{39} & \ph{0.21} & \ph{1.75} & \ph{1.22}\\
+Excluding 3 flagged & \ph{117} & \ph{37} & \ph{0.23} & \ph{1.72} & \ph{1.18}\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Holdout validation (2022 onward)}
+The holdout set contains \ph{42} hires and the training set \ph{75}.
+
+\begin{table}[H]
+\centering
+\caption{Holdout performance (\var{holdout_performance.csv}).}\label{tab:holdout}
+\begin{tabular}{@{}lrr@{}}
+\toprule
+\textbf{Measure} & \textbf{BIC model} & \textbf{Full model}\\
+\midrule
+Training $n$ & \ph{75} & \ph{75}\\
+Holdout $n$ evaluated & \ph{42} & \ph{42}\\
+95\% PI coverage & \ph{0.95} & \ph{0.95}\\
+Coverage 95\% CI & \ph{[0.84, 0.99]} & \ph{[0.84, 0.99]}\\
+RMSE & \ph{9.00} & \ph{9.16}\\
+MAE & \ph{6.93} & \ph{7.10}\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.8\textwidth]{figures/fig7_pi_coverage.png}
+    \caption{Actual versus predicted outcome with 95\% prediction intervals on the 2022+ holdout.}
+    \label{fig:cpi}
+\end{figure}
+
+
+% =====================================================================
+\section{Decision Rule: The Coach Hire Score}\label{sec:decision}
+% =====================================================================
+To make the model usable we built a simple scoring tool. For a candidate with pre-hire characteristics $x_0$ the model gives a predicted impact $\hat y_0$ and a 95\% prediction interval. The \textbf{Coach Hire Score} places $\hat y_0$ within the distribution of fitted values in the training data:
+\[
+\text{Score}(x_0)=100\times\frac{\#\{i:\hat y_i\le \hat y_0\}}{n},
+\]
+so a score of 80 means the candidate is predicted to do better than 80\% of past hires.
+
+Three illustrative candidates were scored: \textbf{A} an experienced Power-4 head coach moving from a strong programme, \textbf{B} a young first-time head coach going to a weak programme, and \textbf{C} an experienced offensive coordinator with ties to the hiring school going to a mid-level programme.
+
+\begin{table}[H]
+\centering
+\caption{Coach Hire Score for the example candidates (\var{coach_hire_score_examples.csv}).}\label{tab:score}
+\begin{tabular}{@{}llrrrr@{}}
+\toprule
+\textbf{Candidate} & \textbf{Model} & \textbf{Predicted} & \textbf{Lower} & \textbf{Upper} & \textbf{Score}\\
+\midrule
+A (established HC) & BIC & \ph{-3.22} & \ph{-18.95} & \ph{12.51} & \ph{45.2}\\
+A (established HC) & Full & \ph{-0.99} & \ph{-18.38} & \ph{16.40} & \ph{63.1}\\
+B (first-time HC) & BIC & \ph{6.63} & \ph{-9.73} & \ph{23.00} & \ph{97.6}\\
+B (first-time HC) & Full & \ph{6.16} & \ph{-12.38} & \ph{24.71} & \ph{95.2}\\
+C (experienced OC) & BIC & \ph{6.41} & \ph{-9.93} & \ph{22.75} & \ph{96.4}\\
+C (experienced OC) & Full & \ph{3.97} & \ph{-15.71} & \ph{23.65} & \ph{88.1}\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Because the prediction intervals are wide relative to the differences between candidates, the score should be used to \emph{rank and support} decisions, not to make them automatically.
+
+% =====================================================================
+\section{Discussion and Limitations}\label{sec:discussion}
+% =====================================================================
+\begin{itemize}
+  \item \textbf{Small sample.} With roughly \ph{84} observations and about 15 predictors, estimates are noisy and prone to overfitting. This motivated cross-validation, penalised methods and the bootstrap.
+  \item \textbf{Single imputation.} Replacing missing values by $0.50$ or the sample mean ignores imputation uncertainty. Standard errors may be slightly too small.
+  \item \textbf{Post-selection inference.} Confidence intervals and $p$-values from the BIC model do not account for the fact that the model was chosen from the data. We therefore also report the full confirmatory model and the optimism-corrected error.
+  \item \textbf{Collinearity.} \var{AllPriorWinPct} and \var{PreviousWinPct} carry overlapping information, so their individual coefficients are unstable although their combined effect is better determined.
+  \item \textbf{Measurement and data quality.} Some employment fields were inconsistent and a few records were excluded or flagged. SP+ is itself a model-based rating.
+  \item \textbf{Holdout size.} The 2022+ holdout is small and recent, so the coverage estimate has a wide confidence interval and some coaches had few completed seasons.
+  \item \textbf{Observational data.} Associations are not causal. Better candidates may also be hired by better-resourced schools.
+\end{itemize}
+
+% =====================================================================
+\section{Conclusions}\label{sec:conclusion}
+% =====================================================================
+
 \begin{enumerate}
-\item \textbf{Small, selected sample:} 84 regression observations for 16 fitted parameters, with two-season and employment-status restrictions. The employment-status condition may select recent hires on observed tenure/outcome.
-\item \textbf{Observational confounding:} resources, schedules, institutional investment, conference context, interim staff, programme trajectory, and timing may affect both hire attributes and outcomes. Coefficients are associations, not causal effects.
-\item \textbf{Collinearity and multiplicity:} the two prior-win measures overlap; H1 depends on a net contrast. No hypothesis survives Holm adjustment.
-\item \textbf{Source provenance:} coach-profile links are embedded in the CSV, but a complete citation trail for historical SP+ input values is missing. The CSV is distributed, but historical input sourcing is not fully auditable.
-\item \textbf{Post hoc holdout:} the 42-row temporal cohort corrects a status-filter/overlap problem but was chosen after observing the initial nine-row result. It is not an untouched external test set.
-\item \textbf{Survival/retention limitations:} only 39 on-field firing events support the Cox model; the Retained4 coding does not distinguish insufficient follow-up from non-retention.
-\item \textbf{Archived output conflicts:} mixed-effects ICC/LRT files disagree and the two holdout RMSE outputs differ slightly. They are disclosed, not averaged or silently resolved.
-\item \textbf{No operational threshold:} neither causal effects nor sufficiently precise prediction intervals are established for candidate selection.
+  \item \textbf{Predictors.} \var{PreviousOC} is the strongest predictor: having been an offensive coordinator is associated with about $+8.5$ SP+ points, it was selected in 77\% of bootstrap samples, and it remains significant after Holm adjustment ($p=0.003$). \var{team_sp_recent} has a negative association ($-0.22$ per SP+ point), was selected in 48\% of bootstrap samples, and is borderline after Holm adjustment ($p=0.052$). Prior win percentage (\var{AllPriorWinPct}) is not significant under any method.
+
+  \item \textbf{Model validity.} The Breusch--Pagan test ($p=0.398$), White's test ($p=0.833$) and the Durbin--Watson test ($p=0.736$) show no violations of constant variance or independence. The Box--Cox estimate $\hat\lambda=0.9$ indicates that no transformation was needed. Collinearity is mild (largest VIF $=5.5$, condition number $=6.7$).
+
+  \item \textbf{Predictive performance.} The BIC-selected model has a cross-validated $R^2$ of $0.07$ (null model: $-0.06$) and a CV RMSE of $8.08$ against $8.62$ for the null model, a small improvement. On the 2022+ holdout the RMSE is $9.00$, which is not lower than the standard deviation of the outcome ($8.44$), so the out-of-sample gain over simply predicting the mean is negligible. The 95\% prediction-interval coverage ($0.95$) is largely due to very wide intervals (about $\pm 16$ SP+ points).
+
+  \item \textbf{Clustering.} School and conference effects are negligible: the intraclass correlation is $0.04$ for school and $0.005$ for conference, and the likelihood-ratio tests are not significant.
+
+  \item \textbf{Retention and tenure.} The logistic model for four-year retention does not generalise: its cross-validated AUC is $0.548$ (apparent AUC $0.781$), and both BIC selection and the LASSO choose the intercept-only model. In the Cox model, none of the hazard ratios is significant (for example, \var{AllPriorWinPct} has HR $=1.75$, 95\% CI $0.19$--$16.26$).
+
+  \item \textbf{Practical use.} The Coach Hire Score gives a transparent way to compare candidates, but its wide prediction intervals mean it should supplement, not replace, expert judgement.
 \end{enumerate}
 
-\section{Conclusion}
-In this team-compiled sample, prior offensive-coordinator experience is the strongest candidate signal and recent programme SP+ also enters the BIC-selected model. However, no pre-specified hypothesis survives Holm correction, the full model performs worse than the null under cross-validation, and the selected model's temporal holdout errors do not beat a simple mean baseline. Survival findings are imprecise, and the retention model has an outcome-censoring limitation. The project supports a transparent statistical description of the available data, not a validated predictor of coaching success. Further work should prioritise a full source ledger, an untouched pre-specified temporal test set, more hires and seasons, censoring-aware retention outcomes, and reconciliation of mixed-model results before the score is considered for practical use.
-
-\section{Reproducibility and Submission Contents}
-The project includes 16 main R scripts in \verb|analysis/R/| and helper scripts in \verb|analysis/lib/|. The pipeline runner is \verb|analysis/run_all.sh| and sets seed 2026. The submission archive contains the raw CSV and checksum, six processed RDS files, all main R scripts and helper functions, 19 figures, 55 result tables, weekly memos, audit/determinism documentation, session information, and this final report. The supplied \verb|final_report.Rmd| and \verb|final_report.html| are preserved byte-for-byte unchanged.
-
-\textbf{Build instructions.} From \verb|RT/analysis/reports/| run \verb|xelatex -interaction=nonstopmode final_report.tex| twice. The PDF links to the local source dataset at \verb|../data/raw/data.csv|. Detailed results and inclusion/exclusion records are supplied as companion CSV files so the report can stay within the 20-page limit.
-
-\textbf{Environment and verification.} The project records R 4.6.1 on Linux x86\_64 and timezone Asia/Kolkata. The preparation container did not have \verb|Rscript|, so the archived R pipeline could not be freshly rerun here. This PDF was compiled with XeLaTeX and checked for page count and layout; numerical findings were taken from the supplied result CSVs and existing R Markdown output. Before claiming a fresh end-to-end rebuild, run \verb|run_all.sh| in the target R environment and reconcile the two explicitly identified output discrepancies.
-
-
-\appendix
-\section{Complete Confirmatory OLS Coefficient Table}
-The following table preserves the full coefficient output for the 15-slope confirmatory specification, including confidence intervals. The table is included to make the confirmatory model auditable without reproducing every raw R output in the main text.
-\begin{table}[H]\centering\scriptsize
-\caption{Full confirmatory OLS model: coefficient estimates, standard errors, p-values, and 95\% confidence intervals}
-\begin{tabularx}{\linewidth}{@{}lrrrrY@{}}\toprule
-Term & Estimate & SE & \(p\) & 95\% CI\\\midrule
-Intercept & 0.579 & 8.450 & 0.946 & [-16.282, 17.440]\\
-PrevHCAnyLevel & -1.050 & 3.930 & 0.790 & [-8.893, 6.793]\\
-AllPriorWinPct & 7.720 & 12.332 & 0.533 & [-16.888, 32.328]\\
-PreviousWinPct & -13.489 & 14.093 & 0.342 & [-41.611, 14.633]\\
-PreviousOC & 7.966 & 3.853 & 0.043 & [0.276, 15.655]\\
-PreviousDC & 0.189 & 4.599 & 0.967 & [-8.989, 9.366]\\
-SideOfBallO & -0.513 & 3.149 & 0.871 & [-6.797, 5.771]\\
-ConnectionToHiring.School & -0.425 & 2.409 & 0.860 & [-5.232, 4.382]\\
-PlayedNFL & -3.947 & 3.197 & 0.221 & [-10.325, 2.432]\\
-AgeAtHiringMinus50 & -0.150 & 0.170 & 0.380 & [-0.489, 0.189]\\
-NFLCoachingExperience & 0.796 & 2.244 & 0.724 & [-3.682, 5.274]\\
-WonCCasHCany & 4.514 & 2.960 & 0.132 & [-1.393, 10.421]\\
-Conf.LeavingP4 & -0.300 & 2.488 & 0.904 & [-5.265, 4.664]\\
-team\_sp\_recent & -0.266 & 0.117 & 0.026 & [-0.499, -0.033]\\
-PromoteWithin & 3.021 & 3.673 & 0.414 & [-4.308, 10.350]\\
-PrevHCAnyLevel:sp\_prev\_rel & 0.083 & 0.170 & 0.629 & [-0.257, 0.423]\\
-\bottomrule\end{tabularx}
-\tabnote{The nominal PreviousOC and team\_sp\_recent p-values do not account for the full model-selection process. H1--H4 multiplicity-adjusted tests are shown in the main report.}
-\end{table}
-
-\section{Supplementary Survival and Logistic Outputs}
-\begin{table}[H]\centering\small
-\caption{Cox proportional-hazards estimates}
-\begin{tabular}{@{}lrrrr@{}}\toprule
-Term & Hazard ratio & 95\% CI lower & 95\% CI upper & \(p\)\\\midrule
-AllPriorWinPct & 1.752 & 0.189 & 16.259 & 0.622\\
-PrevHCAnyLevel & 1.217 & 0.535 & 2.768 & 0.640\\
-AgeAtHiringMinus50 & 1.032 & 0.981 & 1.086 & 0.223\\\bottomrule\end{tabular}
-\end{table}
-\begin{table}[H]\centering\small
-\caption{Secondary logistic-regression odds ratios for Retained4}
-\begin{tabular}{@{}lrrr@{}}\toprule
-Term & OR & 95\% CI lower & 95\% CI upper\\\midrule
-AllPriorWinPct & 9.659 & 0.127 & 732.056\\
-PreviousOC & 0.770 & 0.179 & 3.304\\
-PreviousDC & 1.434 & 0.436 & 4.711\\
-ConnectionToHiring.School & 2.095 & 0.702 & 6.254\\
-PlayedNFL & 0.875 & 0.190 & 4.025\\
-sp\_prev\_rel & 0.995 & 0.921 & 1.076\\\bottomrule\end{tabular}
-\tabnote{Intervals are very wide and all include 1. The Retained4 coding limitation is discussed in Section 6.}
-\end{table}
-
-\section{Supporting-Artifact Index}
-\begin{table}[H]\centering\small
-\caption{Where to find the complete supporting materials in the submission folder}
-\begin{tabularx}{\linewidth}{@{}p{3.4cm}Y@{}}\toprule
-Artifact & Relative path within the group folder\\\midrule
-Raw downloadable dataset & \verb|analysis/data/raw/data.csv| and checksum \verb|data.csv.sha256|\\
-Processed datasets/models & \verb|analysis/data/processed/*.rds|\\
-Analysis code & All 16 scripts in \verb|analysis/R/|\\
-Shared model/pipeline helpers & \verb|analysis/lib/|\\
-Reproducible runner & \verb|analysis/run_all.sh|\\
-Report source and outputs & \verb|analysis/reports/final_report.tex| and \verb|final_report.pdf|\\
-Preserved report render & \verb|analysis/reports/final_report.Rmd| and \verb|final_report.html| (unchanged)\\
-Figures and full numerical outputs & \verb|analysis/figures/| and \verb|analysis/tables/|\\
-Memos and run provenance & \verb|analysis/reports/memos/|, \verb|session_info.txt|, \verb|determinism_report.md|, \verb|audit_log.csv|\\
-\bottomrule\end{tabularx}
-\end{table}
-
-\section*{References}
-\begin{enumerate}[label={[\arabic*]},leftmargin=2.1em,itemsep=2pt]
-\item Burnham, K. P., and Anderson, D. R. (2002). \textit{Model Selection and Multimodel Inference: A Practical Information-Theoretic Approach}. 2nd ed. Springer.
-\item James, G., Witten, D., Hastie, T., and Tibshirani, R. (2021). \textit{An Introduction to Statistical Learning: With Applications in R}. 2nd ed. Springer.
-\item Kaplan, E. L., and Meier, P. (1958). Nonparametric estimation from incomplete observations. \textit{Journal of the American Statistical Association}, 53(282), 457--481.
-\item Cox, D. R. (1972). Regression models and life-tables. \textit{Journal of the Royal Statistical Society: Series B}, 34(2), 187--220.
-\item Efron, B., and Tibshirani, R. J. (1993). \textit{An Introduction to the Bootstrap}. Chapman \& Hall/CRC.
-\item Self, S. G., and Liang, K.-Y. (1987). Asymptotic properties of maximum likelihood estimators and likelihood ratio tests under nonstandard conditions. \textit{Journal of the American Statistical Association}, 82(398), 605--610.
-\item Holm, S. (1979). A simple sequentially rejective multiple test procedure. \textit{Scandinavian Journal of Statistics}, 6(2), 65--70.
-\item White, H. (1980). A heteroskedasticity-consistent covariance matrix estimator and a direct test for heteroskedasticity. \textit{Econometrica}, 48(4), 817--838.
-\item Breusch, T. S., and Pagan, A. R. (1979). A simple test for heteroscedasticity and random coefficient variation. \textit{Econometrica}, 47(5), 1287--1294.
-\item Group RT (2026). \textit{Coaching Hires Dataset}, 132 records x 60 fields, team-compiled CSV. Included in the companion submission files; SHA-256 recorded in \verb|data.csv.sha256|.
-\end{enumerate}
+\textbf{Future work:} multiple imputation for missing values, more seasons of data, hierarchical models with school-specific slopes, and non-linear methods such as random forests.
 
 \end{document}
