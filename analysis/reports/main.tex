@@ -1,4 +1,4 @@
-\documentclass[11pt,a4paper]{article}
+\documentclass[9pt,a4paper]{article}
 
 % ---------- Packages ----------
 \usepackage[utf8]{inputenc}
@@ -14,7 +14,7 @@
 \usepackage{setspace}
 \usepackage[colorlinks=true,linkcolor=blue!50!black,urlcolor=blue!50!black]{hyperref}
 
-\setstretch{1.15}
+\setstretch{0.7}
 \setlength{\parskip}{0.5em}
 \setlength{\parindent}{0pt}
 
@@ -46,7 +46,7 @@
 \thispagestyle{empty}
 
 \begin{abstract}
-Universities spend large sums hiring head football coaches, yet it is unclear which information available \emph{before} the hire actually predicts how well the coach will perform. Using a dataset of \ph{132} coach hires and \ph{60} variables, we model the coach's impact on team strength (\var{sp_rel_team}) using linear regression, and we model retention and tenure using logistic regression and survival analysis. We test the regression assumptions, treat heteroscedasticity and multicollinearity, select a parsimonious model with information criteria and penalised methods, check its stability using the bootstrap and jackknife, account for school-level clustering with mixed models, and validate the model on a prospective holdout of hires from 2022 onward. The best model reaches a cross-validated $R^2$ of \ph{0.0708} and a prediction-interval coverage of \ph{0.952(or 95.2 \%)} on the holdout. The main predictors were PreviousOC (previous offensive coordinator experience) and team\_sp\_recent (recent team SP+ performance context). We conclude with a simple ``Coach Hire Score'' decision rule. \href{https://github.com/avasterinbloom/Predicting-Success-of-Newly-Hired-Power-4-Head-Football-Coaches/upload/main}{Github Repo}
+Universities spend large sums hiring head football coaches, yet it is unclear which information available \emph{before} the hire actually predicts how well the coach will perform. Using a dataset of \ph{132} coach hires and \ph{60} variables, we model the coach's impact on team strength (\var{sp_rel_team}) using linear regression, and we model retention and tenure using logistic regression and survival analysis. We test the regression assumptions, treat heteroscedasticity and multicollinearity, select a parsimonious model with information criteria and penalised methods, check its stability using the bootstrap and jackknife, account for school-level clustering with mixed models, and validate the model on a prospective holdout of hires from 2022 onward. The best model reaches a cross-validated $R^2$ of \ph{0.0708} and a prediction-interval coverage of \ph{0.952(or 95.2 \%)} on the holdout. The main predictors were PreviousOC (previous offensive coordinator experience) and team\_sp\_recent (recent team SP+ performance context). We conclude with a simple ``Coach Hire Score'' decision rule.
 \end{abstract}
 
 % =====================================================================
@@ -548,8 +548,8 @@ Curvature tests: \ph{None of the squared terms for continuous predictors were st
 \subsection{Model selection}
 Best-subsets search suggested \ph{6} predictors under adjusted $R^2$, \ph{4} under $C_p$ and \ph{2} under BIC. The stepwise formulas were:
 \begin{itemize}
-  \item AIC: \ph{sp_rel_team ~ PreviousOC + team_sp_recent + WonCCasHCany + AgeAtHiringMinus50}
-  \item BIC: \ph{sp_rel_team ~ PreviousOC + team_sp_recent}
+\item AIC: {sp_rel_team ~ PreviousOC + team_sp_recent + WonCCasHCany + AgeAtHiringMinus50}
+\item BIC: {sp_rel_team ~ PreviousOC + team_sp_recent}
 \end{itemize}
 
 \begin{table}[H]
@@ -852,7 +852,7 @@ C (experienced OC) & Full & \ph{3.97} & \ph{-15.71} & \ph{23.65} & \ph{88.1}\\
 \end{table}
 
 Because the prediction intervals are wide relative to the differences between candidates, the score should be used to \emph{rank and support} decisions, not to make them automatically.
-
+{\fontsize{9pt}{9.6pt}\selectfont %
 % =====================================================================
 \section{Discussion and Limitations}\label{sec:discussion}
 % =====================================================================
@@ -885,5 +885,5 @@ Because the prediction intervals are wide relative to the differences between ca
 \end{enumerate}
 
 \textbf{Future work:} multiple imputation for missing values, more seasons of data, hierarchical models with school-specific slopes, and non-linear methods such as random forests.
-
+\par} % 
 \end{document}
